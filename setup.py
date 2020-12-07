@@ -5,9 +5,14 @@ Air Quality Measurements Database for Turkey
 """
 # pylint: disable=C0103
 import os
-from glob import glob
 from setuptools import setup
 # import fastentrypoints
+
+from predb import init_db
+from predb import raw2pkl
+
+init_db.main()  # create database
+raw2pkl.main()  # create pkl files
 
 
 def get(x):
