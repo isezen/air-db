@@ -235,11 +235,13 @@ def save_data_to_pickle(csv_file, cur, path_pkl='pickle'):
     sta_ids = get_station_id(dat.header, cur)
     save_index_pkl(dat.date, path_pkl)
 
-    print(csv_file, 'has been read.', end=' ', flush=True)
+    print(csv_file, 'has been read.', end='', flush=True)
 
     for s, c in zip(sta_ids, dat.cols):
         pth = os.path.join(path_pkl, '{:d}_{:05d}.pkl'.format(pol_id, s))
-        save_pkl(pth, c)
+        if not os.path.exists(pth):
+            save_pkl(pth, c)
+        print('.', end='', flush=True)
 
     print(' [SAVED]')
 
