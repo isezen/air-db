@@ -16,7 +16,7 @@ c.execute("SELECT datetime((date * 3600) + 1199145600,'unixepoch'), value FROM
 
 import os
 import re
-import glob
+from glob import glob
 import sqlite3 as sq3
 import hashlib
 import pickle
@@ -244,15 +244,25 @@ def save_data_to_pickle(csv_file, cur, path_pkl='pickle'):
     print(' [SAVED]')
 
 
-if __name__ == '__main__':
-    db_file = 'database/airpy.db'
+def main(path=os.path.dirname(__file__)):
+    """ Main method """
+    path_raw_data = os.path.join(path, 'raw-data')
+    path = os.path.split(path)[0]
+    path_to_pkl = os.path.join(path, 'airpy/data/pkl')
+    db_file = os.path.join(path, 'airpy/data/airpy.db')
+    # db_file = 'database/airpy.db'
+
     s = timer()
 
     with sq3.connect(db_file) as con:
         c = con.cursor()
-        for csv_file in glob.glob('raw-data/*.csv'):
-            save_data_to_pickle(csv_file, c)
+        for csv_file in glob(os.path.join(path_raw_data, '*.csv')):
+            save_data_to_pickle(csv_file, c, path_to_pkl)
 
     elapsed = timer() - s
     print('Elapsed time:', int(elapsed // 60), 'min.',
           int(elapsed % 60), 'sec.')
+
+
+if __name__ == '__main__':
+    main()
