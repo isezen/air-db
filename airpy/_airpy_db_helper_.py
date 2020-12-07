@@ -6,22 +6,22 @@ General database access and sql manipulation methods
 # pylint: disable=C0103, C0201
 
 import os as _os
-import sys as _sys
+# import sys as _sys
 from . import _sql_helper_ as _sh
 
 _keys_date_ = ('date', 'year', 'month', 'day', 'hour', 'week', 'doy', 'hoy')
 _keys_ = ('pol', 'reg', 'city', 'sta') + _keys_date_ + ('value',)
 
 
-def _get_db_path_(data_dir='airpy-database'):
+def _get_db_path_(data_dir='data'):
     """ Get path to database folder """
     try:
         pth = __file__
         rpth = _os.path.realpath(pth)
         db_path = _os.path.dirname(rpth)
-        db_path = _os.path.split(db_path)[0]
-        if not _os.path.exists(_os.path.join(db_path, data_dir)):
-            db_path = _sys.prefix
+        # db_path = _os.path.split(db_path)[0]
+        # if not _os.path.exists(_os.path.join(db_path, data_dir)):
+        #     db_path = _sys.prefix
     except NameError:
         db_path = _os.getcwd()
     return _os.path.join(db_path, data_dir)

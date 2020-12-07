@@ -37,8 +37,6 @@ setup(
     install_requires=get_requirements(),
     tests_require=['pytest'],
     scripts=['airpy-create-db'],
-    data_files=[('airpy-database', ['airpy-database/airpy.db']),
-                ('pkl', glob('pkl/*.pkl'))],
     author=get('author'),
     author_email=get('email'),
     description='Air Quality Measurements Database for Turkey',

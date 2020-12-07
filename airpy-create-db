@@ -125,7 +125,7 @@ def get_meta(path, meta_list):
 
 if __name__ == '__main__':
     s = timer()
-    pkl_files = os.path.join(os.path.split(adh._get_db_path_())[0], 'pkl')
+    pkl_files = os.path.join(adh._get_db_path_(), 'pkl')
     with sq3.connect(adh._get_db_file_()) as con:
         cur = con.cursor()
         rows = get_values(pkl_files)
