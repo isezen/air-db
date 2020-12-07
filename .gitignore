@@ -129,6 +129,5 @@ dmypy.json
 .pyre/
 
 .DS_Store
-prep-db/database/airpy.db*
-prep-db/raw-data/*.csv
+predb/raw-data/*.csv
 
