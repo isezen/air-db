@@ -234,8 +234,9 @@ def data_generator(query, sel, opt_queries, include_nan=True):
                     cur_date = cal[cur_date_index][1]
             last_row = list(r)
             yield last_row
-    for i in _create_nan_(cur_date_index, last_row, sel, cal):
-        yield i
+    if include_nan and last_row is not None:
+        for i in _create_nan_(cur_date_index, last_row, sel, cal):
+            yield i
 
 
 def query_data(args, kwargs, as_list=False, include_nan=True):
