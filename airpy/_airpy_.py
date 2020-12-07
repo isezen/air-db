@@ -34,8 +34,8 @@ def airpy(*args, **kwargs):
 
     as_list = 'list' in return_as
 
-    if 'in_memory' in kwargs.keys():
-        in_memory = kwargs.pop('in_memory')
+    # if 'in_memory' in kwargs.keys():
+    #     in_memory = kwargs.pop('in_memory')
 
     verbose = False
     if 'verbose' in kwargs.keys():
