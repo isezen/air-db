@@ -14,19 +14,19 @@ from datetime import datetime as dt
 from datetime import timedelta as td
 
 
-def calendar_table(start='2008-01-01', end='2029-12-31'):
+def calendar_table(start='2008-01-01 00:00:00', end='2019-01-01 00:00:00'):
     """
      Create calendar table between start and end date
     :param start, end: start and end date in %Y-%m-%d format
     :type start, end: str
     :return list of list
     """
-    b = dt.strptime('2008-01-01', '%Y-%m-%d').replace(tzinfo=timezone.utc)
-    s = dt.strptime(start, '%Y-%m-%d').replace(tzinfo=timezone.utc)
-    e = dt.strptime(end, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+    fmt = '%Y-%m-%d %H:%M:%S'
+    b = dt.strptime('2008-01-01 00:00:00', fmt).replace(tzinfo=timezone.utc)
+    s = dt.strptime(start, fmt).replace(tzinfo=timezone.utc)
+    e = dt.strptime(end, fmt).replace(tzinfo=timezone.utc)
     dates = [s + td(hours=x) for x in range(0, (e - s).days * 24)]
     uid = [int((i.timestamp() - b.timestamp())/3600) for i in dates]
-    date = [i for i in dates]
     year = [i.year for i in dates]
     month = [i.month for i in dates]
     day = [i.day for i in dates]
@@ -34,7 +34,8 @@ def calendar_table(start='2008-01-01', end='2029-12-31'):
     week = [i.isoweekday() for i in dates]
     day_of_year = [i.timetuple().tm_yday for i in dates]
     hour_of_year = [i * 24 + j - 23 for i, j in zip(day_of_year, hour)]
-    return list(map(tuple, zip(*[uid, date, year, month, day, hour, week,
+    dates = [d.strftime('%Y-%m-%d %H:%M:%S') for d in dates]
+    return list(map(tuple, zip(*[uid, dates, year, month, day, hour, week,
                                  day_of_year, hour_of_year])))
 
 
@@ -42,7 +43,8 @@ def create_con(file=':memory:'):
     """ create a database connection to a SQLite database """
     con = None
     try:
-        con = sq3.connect(file)
+        con = sq3.connect(file, detect_types=sq3.PARSE_DECLTYPES |
+                          sq3.PARSE_COLNAMES)
         print(sq3.version)
     except Error as e:
         print(e)
@@ -65,7 +67,9 @@ def exec_sql(con, sql):
 def create_calendar_table(con):
     """ Create calendar table """
     c = con.cursor()
-    c.executemany('INSERT INTO calendar VALUES(?,?,?,?,?,?,?,?,?);',
+    c.executemany("""INSERT INTO 'cal'
+                     ('id', 'date', 'year', 'month', 'day', 'hour',
+                      'week', 'doy', 'hoy') VALUES(?,?,?,?,?,?,?,?,?);""",
                   calendar_table())
     con.commit()
 
@@ -80,16 +84,16 @@ def create_db(file=':memory:', overwrite=True):
         BEGIN TRANSACTION;
 
         -- Table: calendar
-        CREATE TABLE calendar (
-            id    INTEGER NOT NULL,
-            date  TEXT    NOT NULL,
-            year  INTEGER NOT NULL,
-            month INTEGER NOT NULL,
-            day   INTEGER NOT NULL,
-            hour  INTEGER NOT NULL,
-            week  INTEGER NOT NULL,
-            doy   INTEGER NOT NULL,
-            hoy   INTEGER NOT NULL,
+        CREATE TABLE cal (
+            id    INTEGER   NOT NULL,
+            date  TIMESTAMP NOT NULL,
+            year  INTEGER   NOT NULL,
+            month INTEGER   NOT NULL,
+            day   INTEGER   NOT NULL,
+            hour  INTEGER   NOT NULL,
+            week  INTEGER   NOT NULL,
+            doy   INTEGER   NOT NULL,
+            hoy   INTEGER   NOT NULL,
             PRIMARY KEY (id)
         );
 
@@ -106,24 +110,34 @@ def create_db(file=':memory:', overwrite=True):
             REFERENCES reg (id)
         );
 
+        -- Table: status
+        CREATE TABLE status (
+            id     INTEGER NOT NULL,
+            name   TEXT NOT NULL,
+            [desc] TEXT,
+            PRIMARY KEY (id)
+        );
+
 
         -- Table: data
         CREATE TABLE data (
-            date  INTEGER NOT NULL
-                  REFERENCES date_table (id),
-            value REAL,
-            meta  INTEGER NOT NULL
-                  REFERENCES meta (id),
-            sta   INTEGER NOT NULL
-                  REFERENCES sta (id),
-            pol   INTEGER REFERENCES pol (id)
-                  NOT NULL,
+            pol    INTEGER REFERENCES pol (id)
+                   NOT NULL,
+            sta    INTEGER NOT NULL
+                   REFERENCES sta (id),
+            date   INTEGER NOT NULL
+                   REFERENCES cal (id),
+            value  REAL,
+            status INTEGER NOT NULL
+                   REFERENCES status (id),
+            FOREIGN KEY (pol)
+            REFERENCES pol (id),
             FOREIGN KEY (sta)
             REFERENCES sta (id),
-            FOREIGN KEY (pol)
-            REFERENCES pol (id)
-            FOREIGN KEY (meta)
-            REFERENCES meta (id)
+            FOREIGN KEY (date)
+            REFERENCES cal (id),
+            FOREIGN KEY (status)
+            REFERENCES status (id)
         );
 
         -- Table: meta
@@ -132,6 +146,24 @@ def create_db(file=':memory:', overwrite=True):
             name   TEXT NOT NULL,
             [desc] TEXT,
             PRIMARY KEY (id)
+        );
+
+        -- Table: meta data
+        CREATE TABLE data_meta (
+            pol   INTEGER REFERENCES pol (id)
+                  NOT NULL,
+            sta   INTEGER NOT NULL
+                  REFERENCES sta (id),
+            date  INTEGER NOT NULL
+                  REFERENCES cal (id),
+            value INTEGER NOT NULL
+                  REFERENCES meta (id),
+            FOREIGN KEY (pol)
+            REFERENCES pol (id),
+            FOREIGN KEY (sta)
+            REFERENCES sta (id),
+            FOREIGN KEY (date)
+            REFERENCES cal (id)
         );
 
         -- Table: pollutant
@@ -168,15 +200,70 @@ def create_db(file=':memory:', overwrite=True):
             lat    REAL,
             lon    REAL,
             city   INTEGER,
+            PRIMARY KEY (id),
             FOREIGN KEY (city)
-            REFERENCES city (id),
-            PRIMARY KEY (id)
+            REFERENCES city (id)
         );
 
+        CREATE VIEW vlong
+        AS
+        SELECT
+            pol.name AS pol,
+            reg.name AS reg,
+            city.name AS city_ascii,
+            city.nametr AS city,
+            sta.name AS sta_ascii,
+            sta.nametr AS station,
+            cal.date AS date,
+            cal.year AS year,
+            cal.month AS month,
+            cal.day AS day,
+            cal.hour AS hour,
+            cal.week AS week,
+            cal.doy AS doy,
+            cal.hoy AS hoy,
+            value,
+            meta.name AS meta
+        FROM
+            data
+        INNER JOIN pol ON pol.id = data.pol
+        INNER JOIN reg ON reg.id = city.reg
+        INNER JOIN city ON city.id = sta.city
+        INNER JOIN sta ON sta.id = data.sta
+        INNER JOIN cal ON cal.id = data.date
+        INNER JOIN meta ON meta.id = data.meta;
+
+        CREATE VIEW vpm10
+        AS
+        SELECT
+            reg.name AS reg,
+            city.name AS city_ascii,
+            city.nametr AS city,
+            sta.name AS sta_ascii,
+            sta.nametr AS station,
+            cal.date AS date,
+            cal.year AS year,
+            cal.month AS month,
+            cal.day AS day,
+            cal.hour AS hour,
+            cal.week AS week,
+            cal.doy AS doy,
+            cal.hoy AS hoy,
+            value,
+            meta.name AS meta
+        FROM
+            data
+        INNER JOIN pol ON pol.id = data.pol AND pol.name = 'pm10'
+        INNER JOIN reg ON reg.id = city.reg
+        INNER JOIN city ON city.id = sta.city
+        INNER JOIN sta ON sta.id = data.sta
+        INNER JOIN cal ON cal.id = data.date
+        INNER JOIN meta ON meta.id = data.meta;
 
         COMMIT TRANSACTION;
         PRAGMA foreign_keys = on;
     """
+
     if overwrite & os.path.exists(file):
         os.remove(file)
     con = create_con(file)
@@ -195,11 +282,11 @@ def run_sql_script(con, f):
 
 
 if __name__ == '__main__':
-    con = create_db('database/airpy.db')
-    run_sql_script(con, 'SQL/meta.sql')
-    run_sql_script(con, 'SQL/reg.sql')
-    run_sql_script(con, 'SQL/pol.sql')
-    run_sql_script(con, 'SQL/city.sql')
-    run_sql_script(con, 'SQL/sta.sql')
-    create_calendar_table(con)
-    con.close()
+    with create_db('database/airpy.db') as con:
+        run_sql_script(con, 'SQL/meta.sql')
+        run_sql_script(con, 'SQL/status.sql')
+        run_sql_script(con, 'SQL/reg.sql')
+        run_sql_script(con, 'SQL/pol.sql')
+        run_sql_script(con, 'SQL/city.sql')
+        run_sql_script(con, 'SQL/sta.sql')
+        create_calendar_table(con)

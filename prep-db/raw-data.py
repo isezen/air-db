@@ -19,7 +19,8 @@ import re
 import glob
 import sqlite3 as sq3
 import hashlib
-from sqlite3 import IntegrityError
+from timeit import default_timer as timer
+# from sqlite3 import IntegrityError
 from datetime import timezone
 from datetime import datetime as dt
 from collections import namedtuple as nt
@@ -95,7 +96,7 @@ def read_csv_gen(csv_file, colnames, dates):
         for i, line in enumerate(file):
             if i == 0:
                 continue
-            h = hashlib.md5(line.encode())
+            h = hashlib.md5(line.encode()).hexdigest()
             if h in hashes:
                 continue
             hashes.append(h)
@@ -143,17 +144,14 @@ def to_ascii(s):
     return s
 
 
-def get_city_id(header, file):
+def get_city_id(header, cur):
     """ get id's from city table """
     cities = [to_ascii(i.split('-')[0].strip()).lower() for i in header]
-    con = sq3.connect(file)
-    cur = con.cursor()
     ids = []
     for c in cities:
         cur.execute("SELECT id FROM city WHERE name=?", (c,))
         rows = cur.fetchall()
         ids.append(rows[0][0])
-    con.close()
     return ids
 
 
@@ -168,39 +166,30 @@ def get_sta_names_from_header(header):
     return sta_names
 
 
-def get_station_id(header, db_file):
+def get_station_id(header, cur):
     """ get station ids from database """
-    city_ids = get_city_id(header, db_file)
+    city_ids = get_city_id(header, cur)
     sta_names = get_sta_names_from_header(header)
-    con = sq3.connect(db_file)
-    cur = con.cursor()
     ids = []
     for n, i in zip(sta_names, city_ids):
-        cur.execute("SELECT id FROM station WHERE name=? AND city=?", (n, i))
+        cur.execute("SELECT id FROM sta WHERE name=? AND city=?", (n, i))
         rows = cur.fetchall()
         ids.append(rows[0][0])
-    con.close()
     return ids
 
 
-def get_pol_id(pol_name, file):
+def get_pol_id(pol_name, cur):
     """ get pollutant id from database """
-    con = sq3.connect(file)
-    cur = con.cursor()
-    cur.execute("SELECT id FROM pollutant WHERE name=?", (pol_name.lower(),))
+    cur.execute("SELECT id FROM pol WHERE name=?", (pol_name.lower(),))
     rows = cur.fetchall()
-    con.close()
     return rows[0][0]
 
 
-def get_meta_id_list(db_file):
+def get_meta_id_list(cur):
     """ get meta table as list """
-    con = sq3.connect(db_file)
-    cur = con.cursor()
     cur.execute("SELECT id, name FROM meta")
     rows = cur.fetchall()
     ids = list(map(list, zip(*rows)))
-    con.close()
     return ids
 
 
@@ -209,33 +198,34 @@ def get_meta_id(meta_name, meta_list):
     return [meta_list[0][meta_list[1].index(v)] for v in meta_name]
 
 
-def save_data_to_db(csv_file, db_file):
+def save_data_to_db(csv_file, cur):
     """ save content of csv file to database """
-    pol_id = get_pol_id(os.path.basename(csv_file).split('.')[0], db_file)
+    pol_id = get_pol_id(os.path.basename(csv_file).split('.')[0], cur)
     dat = read_csv(csv_file)
-    print(csv_file, 'has been read')
-    sta_ids = get_station_id(dat.header, db_file)
-    con = sq3.connect(db_file)
-    c = con.cursor()
-    meta_list = get_meta_id_list(db_file)
-    n_dup_records = 0
+    print(csv_file, 'has been read.', end=' ', flush=True)
+    sta_ids = get_station_id(dat.header, cur)
+    meta_list = get_meta_id_list(cur)
     for d, v, m in dat.lines:
         m = get_meta_id(m, meta_list)
-        x = [d, v, m, sta_ids, [pol_id] * len(d)]
-        for r in list(map(tuple, zip(*x))):
-            try:
-                c.execute('INSERT INTO data VALUES(?,?,?,?,?);', r)
-            except IntegrityError:
-                n_dup_records += 1
-    con.commit()
-    con.close()
-    if n_dup_records > 0:
-        print(str(n_dup_records) + ' duplicate records were skipped from ' +
-              csv_file)
-    print('data saved to database')
+        x = [[pol_id] * len(d), sta_ids, d, v, m]
+        cur.executemany('INSERT INTO data VALUES(?,?,?,?,?);',
+                        list(map(tuple, zip(*x))))
+    print(' [SAVED]')
 
 
 if __name__ == '__main__':
     db_file = 'database/airpy.db'
-    for csv_file in glob.glob('raw-data/*.csv'):
-        save_data_to_db(csv_file, db_file)
+    s = timer()
+
+    with sq3.connect(db_file) as con:
+        c = con.cursor()
+        for csv_file in glob.glob('raw-data/*.csv'):
+            save_data_to_db(csv_file, c)
+        con.commit()
+        c.execute('CREATE INDEX index_data ON data (pol)')
+        c.execute('CREATE INDEX index_data2 ON data (date)')
+        c.execute('CREATE INDEX index_data3 ON data (date, pol)')
+
+    elapsed = timer() - s
+    print('Elapsed time:', int(elapsed // 60), 'min.',
+          int(elapsed % 60), 'sec.')

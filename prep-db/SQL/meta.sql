@@ -6,7 +6,6 @@
 PRAGMA foreign_keys = off;
 BEGIN TRANSACTION;
 
-INSERT INTO meta (id, name, "desc") VALUES (0, 'ok', NULL);
 INSERT INTO meta (id, name, "desc") VALUES (101, 'nodata', NULL);
 INSERT INTO meta (id, name, "desc") VALUES (102, 'invld', NULL);
 INSERT INTO meta (id, name, "desc") VALUES (103, '<samp', NULL);
