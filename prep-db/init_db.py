@@ -7,6 +7,7 @@ Author : İsmail SEZEN sezenismail@gmail.com
 date: 2020-11-14
 '''
 import os
+from glob import glob
 import sqlite3 as sq3
 from sqlite3 import Error
 from datetime import timezone
@@ -45,7 +46,6 @@ def create_con(file=':memory:'):
     try:
         con = sq3.connect(file, detect_types=sq3.PARSE_DECLTYPES |
                           sq3.PARSE_COLNAMES)
-        print(sq3.version)
     except Error as e:
         print(e)
     return con
@@ -281,12 +281,16 @@ def run_sql_script(con, f):
         print(f + ' does not exist')
 
 
-if __name__ == '__main__':
-    with create_db('database/airpy.db') as con:
-        run_sql_script(con, 'SQL/meta.sql')
-        run_sql_script(con, 'SQL/status.sql')
-        run_sql_script(con, 'SQL/reg.sql')
-        run_sql_script(con, 'SQL/pol.sql')
-        run_sql_script(con, 'SQL/city.sql')
-        run_sql_script(con, 'SQL/sta.sql')
+def main(path=os.path.dirname(__file__)):
+    """ Main Method """
+    path_sql = os.path.join(path, 'SQL')
+    db_file = os.path.join(os.path.split(path)[0], 'airpy/data/airpy.db')
+    with create_db(db_file) as con:
+        for f in glob(os.path.join(path_sql, '*.sql')):
+            run_sql_script(con, f)
         create_calendar_table(con)
+    print('* Database created at {}'.format(db_file))
+
+
+if __name__ == '__main__':
+    main()
