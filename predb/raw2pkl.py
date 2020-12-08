@@ -26,6 +26,7 @@ from datetime import datetime as dt
 from collections import namedtuple as nt
 import datatable as dtable
 from datatable import f, by, first
+from datatable import Frame
 
 
 def fix_header(header):
@@ -80,9 +81,19 @@ def split_val_meta(x):
     :param x: a string
     :type x: str
     """
-    s = x.lower().replace(',', '.')
-    v = s.replace('.', '').replace('-', '')
-    return float(s) if v.isnumeric() else s
+    ret = None
+    if isinstance(x, list):
+        ret = [split_val_meta(i) for i in x]
+    elif isinstance(x, dtable.Frame):
+        if x.ncols > 1:
+            ret = [split_val_meta(i) for i in x]
+        else:
+            ret = split_val_meta(x.to_list()[0])
+    else:
+        s = x.lower().replace(',', '.')
+        v = s.replace('.', '').replace('-', '')
+        ret = float(s) if v.isnumeric() else s
+    return ret
 
 
 def remove_dups(data, fast=True):
@@ -108,7 +119,8 @@ def remove_dups(data, fast=True):
 def read_cols(data):
     """ Generator for datatable columns """
     for i in data:
-        yield [split_val_meta(j) for j in i.to_list()[0]]
+        yield split_val_meta(i)
+        # yield [split_val_meta(j) for j in i.to_list()[0]]
 
 
 def read_csv(csv_file):
@@ -123,6 +135,7 @@ def read_csv(csv_file):
             break
     colnames = ['date' if 'date' in i else i for i in colnames]
     ind2del = [i for i, x in enumerate(colnames) if x in ('', '\n')]
+    dtable.options.progress.enabled = False
     data = dtable.fread(csv_file)
     for j in sorted(ind2del, reverse=True):
         del colnames[j]
@@ -140,7 +153,8 @@ def read_csv(csv_file):
     del colnames[0]
     del data[0]
 
-    cols = read_cols(data)
+    # cols = read_cols(data)
+    cols = data
     data = nt('data', ['header', 'date', 'cols'])
     data = data(colnames, dates, cols)
     return data
@@ -228,22 +242,54 @@ def save_index_pkl(dates, path_pkl='pickle'):
         save_pkl(path, dates)
 
 
+def progressBar(iterable, prefix='', suffix='', decimals=1, length=100,
+                fill='█', printEnd="\r"):
+    """
+    Call in a loop to create terminal progress bar
+    @params:
+        iteration   - Required  : current iteration (Int)
+        total       - Required  : total iterations (Int)
+        prefix      - Optional  : prefix string (Str)
+        suffix      - Optional  : suffix string (Str)
+        decimals    - Optional  : positive number of decimals in percent
+                                  complete (Int)
+        length      - Optional  : character length of bar (Int)
+        fill        - Optional  : bar fill character (Str)
+        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
+    """
+    total = len(iterable)
+
+    # Progress Bar Printing Function
+    def printProgressBar(iteration):
+        percent = ("{0:." + str(decimals) + "f}").format(
+            100 * (iteration / float(total)))
+        filledLength = int(length * iteration // total)
+        br = fill * filledLength + '-' * (length - filledLength)
+        print(f'\r{prefix} |{br}| {percent}% {suffix}', end=printEnd)
+    # Initial Call
+    if len(iterable) > 0:
+        printProgressBar(0)
+        # Update Progress Bar
+        for i, item in enumerate(iterable):
+            yield item
+            printProgressBar(i + 1)
+        # Print New Line on Complete
+        print()
+
+
 def save_data_to_pickle(csv_file, cur, path_pkl='pickle'):
     """ Save csv as pickle files """
     pol_id = get_pol_id(os.path.basename(csv_file).split('.')[0], cur)
     dat = read_csv(csv_file)
     sta_ids = get_station_id(dat.header, cur)
     save_index_pkl(dat.date, path_pkl)
-
-    print(csv_file, 'has been read.', end='', flush=True)
-
-    for s, c in zip(sta_ids, dat.cols):
-        pth = os.path.join(path_pkl, '{:d}_{:05d}.pkl'.format(pol_id, s))
-        if not os.path.exists(pth):
-            save_pkl(pth, c)
-        print('.', end='', flush=True)
-
-    print(' [SAVED]')
+    pkl_files = [os.path.join(path_pkl, '{:d}_{:05d}.pkl'.format(pol_id, s))
+                 for s in sta_ids]
+    pkl_files = [(i, v) for i, v in enumerate(pkl_files)
+                 if not os.path.exists(v)]
+    prefix = os.path.basename(csv_file).split('.')[0]
+    for i, p in progressBar(pkl_files, prefix=prefix.ljust(4), length=50):
+        save_pkl(p, split_val_meta(dat.cols[i]))
 
 
 def main(path=os.path.dirname(__file__)):
@@ -255,7 +301,7 @@ def main(path=os.path.dirname(__file__)):
     # db_file = 'database/airpy.db'
 
     s = timer()
-
+    print('Creating pkl files:')
     with sq3.connect(db_file) as con:
         c = con.cursor()
         for csv_file in glob(os.path.join(path_raw_data, '*.csv')):
