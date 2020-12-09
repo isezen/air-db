@@ -296,8 +296,8 @@ def main(path=os.path.dirname(__file__)):
     """ Main method """
     path_raw_data = os.path.join(path, 'raw-data')
     path = os.path.split(path)[0]
-    path_to_pkl = os.path.join(path, 'airpy/data/pkl')
-    db_file = os.path.join(path, 'airpy/data/airpy.db')
+    path_to_pkl = os.path.join(path, 'airpy', 'data', 'pkl')
+    db_file = os.path.join(path, 'airpy', 'data', 'airpy.db')
     # db_file = 'database/airpy.db'
 
     s = timer()

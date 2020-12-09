@@ -284,7 +284,7 @@ def run_sql_script(con, f):
 def main(path=os.path.dirname(__file__)):
     """ Main Method """
     path_sql = os.path.join(path, 'SQL')
-    db_file = os.path.join(os.path.split(path)[0], 'airpy/data/airpy.db')
+    db_file = os.path.join(os.path.split(path)[0], 'airpy', 'data', 'airpy.db')
     with create_db(db_file) as con:
         for f in glob(os.path.join(path_sql, '*.sql')):
             run_sql_script(con, f)

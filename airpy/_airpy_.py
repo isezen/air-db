@@ -145,7 +145,7 @@ def _check_db_():
     cur = _exec_('SELECT COUNT(*) FROM data')
     ret = cur.fetchall()[0][0] == 0
     if ret:
-        script_path = _os.path.join(_sys.prefix, 'bin/airpy-create-db')
+        script_path = _os.path.join(_sys.prefix, 'bin', 'airpy-create-db')
         print("Run '{}' command to use this function".format(script_path))
     return ret
 
