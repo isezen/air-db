@@ -123,35 +123,54 @@ def get_meta(path, meta_list):
             yield pol_id, sta_id, d, j
 
 
-if __name__ == '__main__':
+def main():
+    """ Main entry function """
     s = timer()
-    pkl_files = os.path.join(adh._get_db_path_(), 'pkl')
-    with sq3.connect(adh._get_db_file_()) as con:
-        cur = con.cursor()
-        rows = get_values(pkl_files)
-        cur.executemany('INSERT INTO data VALUES(?,?,?,?,?);', rows)
-        con.commit()
-        cur.close()
+    files_pkl = os.path.join(adh._get_db_path_(), 'pkl')
+    file_db = adh._get_db_file_()
+    if os.access(file_db, os.W_OK):
+        with sq3.connect(file_db) as con:
+            cur = con.cursor()
+            rows = cur.execute('SELECT COUNT(*) FROM data').fetchall()
+            if rows[0][0] == 0:
+                rows = get_values(files_pkl)
+                cur.executemany('INSERT INTO data VALUES(?,?,?,?,?);', rows)
+                con.commit()
+            else:
+                print('Database has already been created.')
+                return 0
+            cur.close()
 
-        # cur = con.cursor()
-        # rows = get_meta('pkl', get_meta_id_list(cur))
-        # cur.executemany('INSERT INTO data_meta VALUES(?,?,?,?);', rows)
-        # con.commit()
-        # cur.close()
+            # cur = con.cursor()
+            # rows = get_meta('pkl', get_meta_id_list(cur))
+            # cur.executemany('INSERT INTO data_meta VALUES(?,?,?,?);', rows)
+            # con.commit()
+            # cur.close()
 
-        elapsed = timer() - s
-        # print('Completed in ', int(elapsed // 60), 'min.',
-        #       int(elapsed % 60), 'sec.')
-        print('Creating indices...')
-        cur = con.cursor()
-        cur.execute('CREATE INDEX pol_index ON data (pol, sta, date)')
-        cur.execute('CREATE INDEX date_index ON data (date)')
-        cur.execute('CREATE INDEX sta_index ON data (sta)')
-        cur.close()
+            elapsed = timer() - s
+            # print('Completed in ', int(elapsed // 60), 'min.',
+            #       int(elapsed % 60), 'sec.')
+            print('Creating indices...')
+            cur = con.cursor()
+            cur.execute('CREATE INDEX pol_index ON data (pol, sta, date)')
+            cur.execute('CREATE INDEX date_index ON data (date)')
+            cur.execute('CREATE INDEX sta_index ON data (sta)')
+            cur.close()
+    else:
+        print("You don't have enough permission to write to database file.")
+        return 0
 
     elapsed = timer() - s
     print('Database created in ', int(elapsed // 60), 'min.',
           int(elapsed % 60), 'sec.')
-    for f in glob.glob(os.path.join(pkl_files, '*.pkl')):
-        os.remove(f)
-    os.rmdir(pkl_files)
+    for f in glob.glob(os.path.join(files_pkl, '*.pkl')):
+        if os.access(f, os.W_OK):
+            os.remove(f)
+        else:
+            break
+    if os.access(files_pkl, os.W_OK):
+        os.rmdir(files_pkl)
+
+
+if __name__ == '__main__':
+    main()
