@@ -294,18 +294,18 @@ def save_data_to_pickle(csv_file, cur, path_pkl='pickle'):
 
 def main(path=os.path.dirname(__file__)):
     """ Main method """
-    path_raw_data = os.path.join(path, 'raw-data')
-    path = os.path.split(path)[0]
-    path_to_pkl = os.path.join(path, 'airpy', 'data', 'pkl')
-    db_file = os.path.join(path, 'airpy', 'data', 'airpy.db')
+    files_raw_data = os.path.join(path, 'raw-data', '*.csv')
+    path_data = os.path.join(os.path.split(path)[0], 'airpy', 'data')
+    path_pkl = os.path.join(path_data, 'pkl')
+    file_db = os.path.join(path_data, 'airpy.db')
     # db_file = 'database/airpy.db'
 
     s = timer()
     print('Creating pkl files:')
-    with sq3.connect(db_file) as con:
+    with sq3.connect(file_db) as con:
         c = con.cursor()
-        for csv_file in glob(os.path.join(path_raw_data, '*.csv')):
-            save_data_to_pickle(csv_file, c, path_to_pkl)
+        for csv_file in glob(files_raw_data):
+            save_data_to_pickle(csv_file, c, path_pkl)
 
     elapsed = timer() - s
     print('Elapsed time:', int(elapsed // 60), 'min.',

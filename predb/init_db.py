@@ -283,13 +283,14 @@ def run_sql_script(con, f):
 
 def main(path=os.path.dirname(__file__)):
     """ Main Method """
-    path_sql = os.path.join(path, 'SQL')
-    db_file = os.path.join(os.path.split(path)[0], 'airpy', 'data', 'airpy.db')
-    with create_db(db_file) as con:
-        for f in glob(os.path.join(path_sql, '*.sql')):
+    files_sql = os.path.join(path, 'SQL', '*.sql')
+    path_data = os.path.join(os.path.split(path)[0], 'airpy', 'data')
+    file_db = os.path.join(path_data, 'airpy.db')
+    with create_db(file_db) as con:
+        for f in glob(files_sql):
             run_sql_script(con, f)
         create_calendar_table(con)
-    print('* Database created at {}'.format(db_file))
+    print('* Database created at {}'.format(file_db))
 
 
 if __name__ == '__main__':

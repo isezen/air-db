@@ -7,7 +7,7 @@ General database access methods
 
 
 import os as _os
-import sys as _sys
+import sysconfig
 from time import time
 import pandas as _pd
 from . import _airpy_db_helper_ as _adh
@@ -145,8 +145,9 @@ def _check_db_():
     cur = _exec_('SELECT COUNT(*) FROM data')
     ret = cur.fetchall()[0][0] == 0
     if ret:
-        script_path = _os.path.join(_sys.prefix, 'bin', 'airpy-create-db')
-        print("Run '{}' command to use this function".format(script_path))
+        path_scripts = sysconfig.get_paths()['scripts']
+        path_scripts = _os.path.join(path_scripts, 'airpy-create-db')
+        print("Run '{}' command to use this function".format(path_scripts))
     return ret
 
 
