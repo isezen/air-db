@@ -38,6 +38,7 @@ setup(
     packages=['airpy'],
     package_dir={'airpy': 'airpy'},
     include_package_data=True,
+    package_data={'airpy': ['data/airpy.db']},
     setup_requires=['pytest-runner'],
     install_requires=get_requirements(),
     tests_require=['pytest'],
