@@ -19,12 +19,6 @@ def get(x):
     return None
 
 
-def get_requirements():
-    """ Some gode string"""
-    requirements = ['pandas']
-    return requirements
-
-
 setup(
     name='airpy',
     version=get('version'),
@@ -34,7 +28,7 @@ setup(
     include_package_data=True,
     package_data={'airpy': ['data/README.md']},
     setup_requires=['pytest-runner'],
-    install_requires=get_requirements(),
+    install_requires=['pandas'],
     tests_require=['pytest'],
     scripts=['airpy-install-db'],
     author=get('author'),
