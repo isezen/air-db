@@ -1,18 +1,12 @@
 """
 airpy
 ~~~~~~~~~
-Air Quality Measurements Database for Turkey
+Environment Database for Turkey
 """
+
 # pylint: disable=C0103
 import os
 from setuptools import setup
-# import fastentrypoints
-
-from predb import init_db
-from predb import raw2pkl
-
-init_db.main()  # create database
-raw2pkl.main()  # create pkl files
 
 
 def get(x):
@@ -38,14 +32,14 @@ setup(
     packages=['airpy'],
     package_dir={'airpy': 'airpy'},
     include_package_data=True,
-    package_data={'airpy': ['data/airpy.db']},
+    package_data={'airpy': ['data/README.md']},
     setup_requires=['pytest-runner'],
     install_requires=get_requirements(),
     tests_require=['pytest'],
-    scripts=['airpy-create-db'],
+    scripts=['airpy-install-db'],
     author=get('author'),
     author_email=get('email'),
-    description='Air Quality Measurements Database for Turkey',
+    description='Environment Database for Turkey',
     long_description=__doc__,
     license=get('license'),
     classifiers=[
@@ -58,6 +52,6 @@ setup(
         "Programming Language :: Python :: 3.8",
         "Topic :: Utilities",
     ],
-    keywords=['data', 'environment', 'pollutant', 'turkey'],
+    keywords=['data', 'environment', 'pollutant', 'meteorology', 'turkey'],
     url='https://github.com/isezen/airpy',
 )
