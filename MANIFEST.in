@@ -1,2 +1,1 @@
-include airpy/data/pkl/*.pkl
-include airpy/data/airpy.db
+include airpy/data/README.md
