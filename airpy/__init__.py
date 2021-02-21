@@ -40,6 +40,7 @@ class Options(metaclass=_Singleton):  # pylint: disable=R0903
 
     def __init__(self):
         self._db_path = None
+        self._github_pat = None
 
     @property
     def db_path(self):
@@ -63,6 +64,24 @@ class Options(metaclass=_Singleton):  # pylint: disable=R0903
         if not os.path.isdir(new_path):
             raise FileNotFoundError("Directory not found '" + new_path + "'.")
         self._db_path = new_path
+
+    @property
+    def github_pat(self):
+        """ Github Personal Access Token """
+        if self._github_pat is not None:
+            return self._github_pat
+        try:
+            self._github_pat = os.environ['GITHUB_PAT']
+        except KeyError:
+            self._github_pat = ''
+        return self._github_pat
+
+    @github_pat.setter
+    def github_pat(self, new_pat):
+        if isinstance(new_pat, str):
+            self._db_path = new_pat
+        else:
+            ValueError('github_pat is not correct')
 
 
 options = Options()
@@ -533,3 +552,72 @@ class Database:
             print(open(fn, "r").read())
         else:
             print('LICENSE file cannot be found for', self._name, 'database.')
+
+    @staticmethod
+    def install(pth):
+        """
+        Install a database
+        Args:
+            pth   (str): A local path or URL to database installation file
+        """
+        # pylint: disable=C0415
+
+        pat = options.github_pat
+        import shutil as sh
+        from tempfile import TemporaryDirectory as tmpdir
+        with tmpdir() as tdir:
+            if pth.startswith('http://') or pth.startswith('https://'):
+                from urllib.request import Request
+                from urllib.request import urlopen
+                from urllib.parse import urlparse
+                fn = os.path.basename(urlparse(pth).path)
+                path_to_file = os.path.join(tdir, fn)
+                print('Downloading database...')
+                req = Request(pth)
+
+                if pat != '':
+                    req.add_header("Authorization", "token {}".format(pat))
+
+                with urlopen(req) as resp, open(path_to_file, 'wb') as f:
+                    sh.copyfileobj(resp, f)
+            elif os.path.exists(pth):
+                fn = os.path.basename(pth)
+                path_to_file = os.path.join(tdir, fn)
+                sh.copyfile(pth, path_to_file)
+            else:
+                raise ValueError('pth argument is not valid.')
+
+            sh.unpack_archive(path_to_file, tdir)
+            archive_dir = [p for p in os.scandir(tdir) if p.is_dir()]
+            if len(archive_dir) > 0:
+                archive_dir = os.path.join(tdir, archive_dir[0].name)
+            else:
+                archive_dir = tdir
+
+            install_script = os.path.join(archive_dir, 'install.py')
+            if os.path.exists(install_script):
+                from importlib.util import spec_from_file_location
+                from importlib.util import module_from_spec
+                spec = spec_from_file_location("install", install_script)
+                script = module_from_spec(spec)
+                spec.loader.exec_module(script)
+                if script.agree_to_lic():
+                    script.install(options.db_path)
+            else:
+                raise FileNotFoundError('Installation script was not found')
+
+    @staticmethod
+    def install_github(user, repo):
+        """
+        Install a database from github
+        Args:
+            user (str): User nor organization name
+            repo (str): repository name
+        """
+        pth = 'https://github.com/{}/{}/archive/main.tar.gz'
+        Database.install(pth.format(user, repo))
+
+    @staticmethod
+    def install_sample():
+        """ Install sample database """
+        Database.install_github('careitu', 'airpy-samp.db')
