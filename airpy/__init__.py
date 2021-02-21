@@ -525,3 +525,11 @@ class Database:
         if verbose:
             print('Query completed in %f seconds.' % elapsed)
         return ret
+
+    def print_lic(self):
+        """ print license information """
+        fn = os.path.join(options.db_path, self._name + '.LICENSE')
+        if os.path.exists(fn):
+            print(open(fn, "r").read())
+        else:
+            print('LICENSE file cannot be found for', self._name, 'database.')
