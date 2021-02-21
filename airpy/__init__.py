@@ -82,7 +82,7 @@ class Database:
         """
         Create a Database object
         Args:
-            name (str): Database name without extension
+            name        (str): Database name without extension
             return_type (str): One of gen, list, long_list, [df]
         """
         self._name = name
