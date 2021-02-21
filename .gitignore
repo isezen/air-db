@@ -129,5 +129,6 @@ dmypy.json
 .pyre/
 
 .DS_Store
-predb/raw-data/*.csv
+airpy/data/*.db
+airpy/data/*.LICENSE
 
