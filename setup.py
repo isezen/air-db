@@ -30,7 +30,6 @@ setup(
     setup_requires=['pytest-runner'],
     install_requires=['pandas'],
     tests_require=['pytest'],
-    scripts=['airpy-install-db'],
     author=get('author'),
     author_email=get('email'),
     description='Environment Database for Turkey',
