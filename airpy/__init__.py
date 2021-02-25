@@ -79,7 +79,7 @@ class Options(metaclass=_Singleton):  # pylint: disable=R0903
     @github_pat.setter
     def github_pat(self, new_pat):
         if isinstance(new_pat, str):
-            self._db_path = new_pat
+            self._github_pat = new_pat
         else:
             ValueError('github_pat is not correct')
 
@@ -554,7 +554,7 @@ class Database:
             print('LICENSE file cannot be found for', self._name, 'database.')
 
     @staticmethod
-    def install(pth):
+    def install(pth):  # pylint: disable=R0914
         """
         Install a database
         Args:
