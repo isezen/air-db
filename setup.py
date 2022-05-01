@@ -29,7 +29,7 @@ setup(
     include_package_data=True,
     package_data={'airdb': ['data/README.md']},
     setup_requires=['pytest-runner'],
-    install_requires=['pandas'],
+    install_requires=['pandas', 'numpy', 'xarray'],
     tests_require=['pytest'],
     author=get('author'),
     author_email=get('email'),

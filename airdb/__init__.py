@@ -13,14 +13,17 @@ date    : 2021
 """
 
 # pylint: disable=C0103, C0201
+from collections import defaultdict
 from contextlib import closing
 from time import time
 
 import os
 import sqlite3 as sq
 import pandas as pd
+import xarray as _xr
+import numpy as _np
 
-__version__ = '0.0.2'
+__version__ = '0.0.3'
 __author__ = 'Ismail SEZEN'
 __email__ = 'sezenismail@gmail.com'
 __license__ = 'AGPLv3'
@@ -95,7 +98,8 @@ class Database:
     """
 
     _keys_date = ('date', 'year', 'month', 'day', 'hour', 'week', 'doy', 'hoy')
-    _keys = ('param', 'reg', 'city', 'sta') + _keys_date + ('value',)
+    _keys = ('param', 'reg', 'city', 'sta', 'lat', 'lon') + _keys_date + \
+            ('value',)
 
     # %%--------
 
@@ -116,8 +120,8 @@ class Database:
         self._con = sq.connect(self._path, detect_types=sq.PARSE_DECLTYPES)
         self._cur = self._con.cursor()
         self._set_table_method('id,name,lat,lon', 'reg', 'region')
-        self._set_table_method('id,nametr,lat,lon', 'city', 'city')
-        self._set_table_method('id,nametr,cat,lat,lon', 'sta', 'station')
+        self._set_table_method('id,reg,nametr,lat,lon', 'city', 'city')
+        self._set_table_method('id,city,nametr,cat,lat,lon', 'sta', 'station')
         self._set_table_method('name,long_name,short_name,unit', 'param',
                                'parameter')
 
@@ -132,7 +136,7 @@ class Database:
 
     @property
     def _opt_ret(self):
-        return ['gen', 'list', 'long_list', 'df']
+        return ['gen', 'list', 'long_list', 'df', 'xarray']
 
     # %%--------
 
@@ -193,6 +197,56 @@ class Database:
             return self._return(return_type, sel.split(','))
 
         setattr(self, func_name, _table)
+
+    @staticmethod
+    def _split(x, f):
+        """
+        R-style split function
+        Args:
+            x (list): List to be split
+            f (list of str or tuple): Factor list split by
+        Return (dict):
+            Splitted dict of x
+        """
+        res = defaultdict(list)
+        for v, k in zip(x, f):
+            res[k].append(v)
+        return res
+
+    @staticmethod
+    def _long_to_xarray(q):
+        """
+        Convert long list query result to xarray
+        Args:
+            q (list): Long-list result of query
+        Return (xarray):
+            Combined xarray result of query
+        """
+        n = 2
+        x = Database._split(list(map(list, zip(*q[-n:]))),
+                            list(map(tuple, zip(*q[:(len(q) - n)]))))
+        ll = []
+        for k, v in x.items():
+            pol, region, city, station, lat, lon = k
+            if lat is None:
+                lat = float('NaN')
+            if lon is None:
+                lon = float('NaN')
+            v = list(map(list, zip(*v)))
+            obs = _xr.DataArray(v[1], dims=['time'],
+                                coords={'time': (('time'), v[0])})
+            obs = obs.expand_dims(dict(zip(['pol', 'region', 'city', 'sta'],
+                                           [1, 1, 1, 1])))
+            obs = obs.assign_coords(pol=[pol], region=[region], city=[city],
+                                    sta=[station], lat=lat, lon=lon)
+            ll.append(obs)
+        x = _xr.concat(ll, dim='sta')
+        dims = x.dims[1:]
+        xarr = [a for a in x]
+        for i, xa in enumerate(xarr):
+            xa.name = xa.coords['pol'].values.tolist()
+            xarr[i] = xa.drop('pol', dim=None)
+        return _xr.merge(xarr)
 
     @staticmethod
     def _build_where(var, val):  # pylint: disable=R0912
@@ -284,7 +338,7 @@ class Database:
     def _build_main_select_string(sel):
         """ build select statement for the db query """
         opt_select = dict(zip(Database._keys,
-                              [True] * 5 + [False] * 7 + [True]))
+                              [True] * 7 + [False] * 7 + [True]))
         if isinstance(sel, str):
             sel = sel.split(',')
         if isinstance(sel, list):
@@ -307,6 +361,33 @@ class Database:
             if k in opt_queries.keys():
                 opt_queries[k] = kwargs[k]
         return opt_queries
+
+    @staticmethod
+    def dropna(x):
+        """ Simplify xarray object by dropping all NA dims """
+        if not isinstance(x, _xr.core.dataarray.DataArray):
+            raise ValueError('x must be a DataArray object')
+        for d in tuple(d for d in x.dims if d != 'time'):
+            x = x.dropna(dim=d, how='all')
+        return x
+
+    @staticmethod
+    def to_netcdf(x, file):
+        """
+        Save xarray as netcdf file
+        Args:
+            x (DataArray or Dataset): xarray object
+            file (str): File name to save
+        """
+        enc = {}
+        encoding = {'dtype': _np.dtype('float32'), 'zlib': True, 'complevel': 5}
+        if isinstance(x, _xr.core.dataarray.DataArray):
+            enc.update({x.name: encoding})
+        elif isinstance(x, _xr.core.dataset.Dataset):
+            for k in x.keys():
+                enc.update({k: encoding})
+        x.to_netcdf(file, encoding=enc)
+
 
     def _get_ids_for_tables(self, opt_queries):
         """
@@ -381,6 +462,8 @@ class Database:
                 city.nametr AS city,
                 sta.name AS sta_ascii,
                 sta.nametr AS sta,
+                sta.lat AS lat,
+                sta.lon AS lon,
                 cal.date AS date,
                 cal.year AS year,
                 cal.month AS month,
@@ -540,6 +623,9 @@ class Database:
             ret = list(map(list, zip(*data)))
         elif self._return_type == 'df':
             ret = pd.DataFrame(data, columns=colnames)
+        elif self._return_type == 'xarray':
+            ret = list(map(list, zip(*data)))
+            ret = Database._long_to_xarray(ret)
 
         t2 = time()
         elapsed = t2 - t1
