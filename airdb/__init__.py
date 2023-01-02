@@ -23,7 +23,7 @@ import pandas as pd
 import xarray as _xr
 import numpy as _np
 
-__version__ = '0.0.3'
+__version__ = '0.0.5'
 __author__ = 'Ismail SEZEN'
 __email__ = 'sezenismail@gmail.com'
 __license__ = 'AGPLv3'
@@ -108,7 +108,7 @@ class Database:
         Create a Database object
         Args:
             name        (str): Database name without extension
-            return_type (str): One of gen, list, long_list, [df]
+            return_type (str): One of gen, list, long_list, [df], xarray
         """
         self._name = name
         self._path = os.path.join(options.db_path, name + '.db')
@@ -119,9 +119,10 @@ class Database:
         self._return_type = return_type
         self._con = sq.connect(self._path, detect_types=sq.PARSE_DECLTYPES)
         self._cur = self._con.cursor()
-        self._set_table_method('id,name,lat,lon', 'reg', 'region')
-        self._set_table_method('id,reg,nametr,lat,lon', 'city', 'city')
-        self._set_table_method('id,city,nametr,cat,lat,lon', 'sta', 'station')
+        # self._set_table_method('id,name,lat,lon', 'reg', 'region')
+        # self._set_table_method('id,reg,nametr,lat,lon', 'city', 'city')
+        # self._set_table_method('id,city,nametr,cat,lat,lon', 'sta',
+        #                        'station')
         self._set_table_method('name,long_name,short_name,unit', 'param',
                                'parameter')
 
@@ -199,6 +200,114 @@ class Database:
         setattr(self, func_name, _table)
 
     @staticmethod
+    def _build_where_like(query):
+        """
+        Build a where query with like operator
+        Args:
+            query (dict): A dict object contains key-value pairs to construct
+                          a WHERE query
+        Return: (str):
+            WHERE query
+        """
+        sql = ''
+        if any([v is not None for v in query.values()]):
+            sql += ' WHERE'
+            where_clauses = [f" {k} LIKE '{v.lower()}' " for k, v in
+                             query.items() if v is not None]
+            sql += 'AND'.join(where_clauses)
+        return sql
+
+    def region(self, region=None, return_type='df'):
+        """
+        Region data. region arg is used to filter results with LIKE statement.
+        Args:
+            region (str)      : Region to search in database
+            return_type (str) : One of gen, list, long_list, [df]
+        Return: :
+            Region data
+        """
+        sel = 'id,region,lat,lon'
+        sql = f"""
+            SELECT
+                {sel}
+            FROM
+            (SELECT
+                reg.id AS id,
+                reg.name AS region,
+                reg.lat AS lat,
+                reg.lon AS lon
+            FROM
+                reg)"""
+        sql += Database._build_where_like({'region': region})
+        self._cur = self._con.cursor().execute(sql + ';')
+        return self._return(return_type, sel.split(','))
+
+    def city(self, city=None, region=None, return_type='df'):
+        """
+        City data. city|region args are used to filter results with 
+        LIKE statement.
+        Args:
+            city (str)        : City to search in database
+            region (str)      : Region to search in database
+            return_type (str) : One of gen, list, long_list, [df]
+        Return: :
+            City data
+        """
+        sel = 'id,region,city,ascii,lat,lon'
+        sql = f"""
+            SELECT
+                {sel}
+            FROM
+            (SELECT
+                city.id AS id,
+                reg.name AS region,
+                city.nametr AS city,
+                city.name AS ascii,
+                city.lat AS lat,
+                city.lon AS lon
+            FROM
+                city
+            INNER JOIN reg ON reg.id = city.reg)"""
+        sql += Database._build_where_like({'city': city, 'region': region})
+        self._cur = self._con.cursor().execute(sql + ';')
+        return self._return(return_type, sel.split(','))
+
+    def station(self, station=None, city=None, region=None, return_type='df'):
+        """
+        Station data. station|city|region args are used to filter results with
+        LIKE statement.
+        Args:
+            station (str)     : Station to search in database
+            city (str)        : City to search in database
+            region (str)      : Region to search in database
+            return_type (str) : One of gen, list, long_list, [df]
+        Return: :
+            Station data
+        """
+        sel = 'id,region,city,station,lat,lon'
+        sql = f"""
+            SELECT
+                {sel}
+            FROM
+            (SELECT
+                sta.id AS id,
+                reg.name AS region,
+                city.nametr AS city,
+                sta.nametr AS station,
+                sta.name AS ascii,
+                city.lat AS lat,
+                city.lon AS lon
+            FROM
+                sta
+            INNER JOIN reg ON reg.id = city.reg
+            INNER JOIN city ON city.id = sta.city)"""
+        sql += Database._build_where_like({'station': station,
+                                           'city': city,
+                                           'region': region})
+        self._cur = self._con.cursor().execute(sql + ';')
+        return self._return(return_type, sel.split(','))
+
+    @staticmethod
     def _split(x, f):
         """
         R-style split function
@@ -240,13 +349,15 @@ class Database:
             obs = obs.assign_coords(pol=[pol], region=[region], city=[city],
                                     sta=[station], lat=lat, lon=lon)
             ll.append(obs)
-        x = _xr.concat(ll, dim='sta')
-        dims = x.dims[1:]
-        xarr = [a for a in x]
-        for i, xa in enumerate(xarr):
-            xa.name = xa.coords['pol'].values.tolist()
-            xarr[i] = xa.drop('pol', dim=None)
-        return _xr.merge(xarr)
+        if len(ll) > 0:
+            x = _xr.concat(ll, dim='sta')
+            dims = x.dims[1:]
+            xarr = [a for a in x]
+            for i, xa in enumerate(xarr):
+                xa.name = xa.coords['pol'].values.tolist()
+                xarr[i] = xa.drop('pol', dim=None)
+            return _xr.merge(xarr)
+        return None
 
     @staticmethod
     def _build_where(var, val):  # pylint: disable=R0912
@@ -380,14 +491,14 @@ class Database:
             file (str): File name to save
         """
         enc = {}
-        encoding = {'dtype': _np.dtype('float32'), 'zlib': True, 'complevel': 5}
+        encoding = {'dtype': _np.dtype('float32'), 'zlib': True,
+                    'complevel': 5}
         if isinstance(x, _xr.core.dataarray.DataArray):
             enc.update({x.name: encoding})
         elif isinstance(x, _xr.core.dataset.Dataset):
             for k in x.keys():
                 enc.update({k: encoding})
         x.to_netcdf(file, encoding=enc)
-
 
     def _get_ids_for_tables(self, opt_queries):
         """
