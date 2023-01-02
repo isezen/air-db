@@ -188,16 +188,16 @@ class Database:
                 return func
             return _doc
 
-        @add_doc("""
-            Return data from {0} table
+        @add_doc(f"""
+            Return data from {table_name} table
             Args:
-                name        (str): {1} name
+                name        (str): {func_name} name
                 return_type (str): One of gen, list, long_list, [df]
-            """.format(table_name, func_name))
+            """)
         def _table(name=None, return_type='df'):
-            sql = 'SELECT {} FROM {}'.format(sel, table_name)
+            sql = f'SELECT {sel} FROM {table_name}'
             if name is not None:
-                sql += ' WHERE name LIKE \'{}\''.format(name.lower())
+                sql += f' WHERE name LIKE \'{name.lower()}\''
             self._cur = self._con.cursor().execute(sql)
             return self._return(return_type, sel.split(','))
 
@@ -215,7 +215,7 @@ class Database:
             WHERE query
         """
         sql = ''
-        if any([v is not None for v in query.values()]):
+        if any(v is not None for v in query.values()):
             sql += ' WHERE'
             where_clauses = [f" {k} LIKE '{v.lower()}' " for k, v in
                              query.items() if v is not None]
@@ -365,8 +365,8 @@ class Database:
             ll.append(obs)
         if len(ll) > 0:
             x = _xr.concat(ll, dim='sta')
-            dims = x.dims[1:]
-            xarr = [a for a in x]
+            # dims = x.dims[1:]
+            xarr = list(x)
             for i, xa in enumerate(xarr):
                 xa.name = xa.coords['pol'].values.tolist()
                 xarr[i] = xa.drop('pol', dim=None)
@@ -415,8 +415,8 @@ class Database:
                     val = '\'' + val + '\''
                 ret = cmp.join([var, val])
         elif isinstance(val, list):
-            if all([isinstance(v, str) for v in val]):  # all is str
-                if all([v.startswith(('>', '<')) for v in val]):
+            if all(isinstance(v, str) for v in val):  # all is str
+                if all(v.startswith(('>', '<')) for v in val):
                     ret = ' AND '.join(
                         [Database._build_where(var, v) for v in val])
                     ret = '(' + ret + ')'
@@ -469,7 +469,7 @@ class Database:
         if isinstance(sel, str):
             sel = sel.split(',')
         if isinstance(sel, list):
-            if any([s in opt_select.keys() for s in sel]):
+            if any(s in opt_select.keys() for s in sel):
                 opt_select = {k: False for k in opt_select.keys()}
                 for s in sel:
                     if s in opt_select.keys():
@@ -759,14 +759,15 @@ class Database:
         t2 = time()
         elapsed = t2 - t1
         if verbose:
-            print('Query completed in %f seconds.' % elapsed)
+            print(f'Query completed in {elapsed:.3f} seconds.')
         return ret
 
     def print_lic(self):
         """Print license information."""
         fn = os.path.join(options.db_path, self._name + '.LICENSE')
         if os.path.exists(fn):
-            print(open(fn, "r").read())
+            with open(fn, "r", encoding="utf-8") as f:
+                print(f.read())
         else:
             print('LICENSE file cannot be found for', self._name, 'database.')
 
@@ -794,7 +795,7 @@ class Database:
                 req = Request(pth)
 
                 if pat != '':
-                    req.add_header("Authorization", "token {}".format(pat))
+                    req.add_header("Authorization", f"token {pat}")
 
                 with urlopen(req) as resp, open(path_to_file, 'wb') as f:
                     sh.copyfileobj(resp, f)
