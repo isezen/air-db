@@ -131,4 +131,5 @@ dmypy.json
 .DS_Store
 airdb/data/*.db
 airdb/data/*.LICENSE
+pkl_files
 
