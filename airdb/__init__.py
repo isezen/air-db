@@ -1,10 +1,11 @@
 """
-airdb package
+airdb package.
+
 ~~~~~~~~~~~~~~~~~~~~~
 A data access layer (DAL) to easily query environmental time series datasets
 obtained from various sources.
 
-version : 0.0.2
+version : 0.0.5
 github  : https://github.com/isezen/airdb
 author  : Ismail SEZEN
 email   : sezenismail@gmail.com
@@ -41,15 +42,16 @@ class _Singleton(type):
 
 
 class Options(metaclass=_Singleton):  # pylint: disable=R0903
-    """ Options """
+    """Options."""
 
     def __init__(self):
+        """Initialize."""
         self._db_path = None
         self._github_pat = None
 
     @property
     def db_path(self):
-        """ Database path """
+        """Database path."""
         if self._db_path is not None:
             return self._db_path
         try:
@@ -72,7 +74,7 @@ class Options(metaclass=_Singleton):  # pylint: disable=R0903
 
     @property
     def github_pat(self):
-        """ Github Personal Access Token """
+        """Github Personal Access Token."""
         if self._github_pat is not None:
             return self._github_pat
         try:
@@ -93,9 +95,7 @@ options = Options()
 
 
 class Database:
-    """
-    This class is used to connect to a specific airdb database.
-    """
+    """This class is used to connect to a specific airdb database."""
 
     _keys_date = ('date', 'year', 'month', 'day', 'hour', 'week', 'doy', 'hoy')
     _keys = ('param', 'reg', 'city', 'sta', 'lat', 'lon') + _keys_date + \
@@ -105,7 +105,8 @@ class Database:
 
     def __init__(self, name, return_type='gen'):
         """
-        Create a Database object
+        Create a Database object.
+
         Args:
             name        (str): Database name without extension
             return_type (str): One of gen, list, long_list, [df], xarray
@@ -127,12 +128,15 @@ class Database:
                                'parameter')
 
     def __enter__(self):
+        """Return self in with statement."""
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """Close database connection when exit from with."""
         self._con.close()
 
     def __del__(self):
+        """If Database deleted, close connection."""
         self._con.close()
 
     @property
@@ -143,17 +147,17 @@ class Database:
 
     @property
     def path(self):
-        """ Path to database file """
+        """Path to database file."""
         return self._path
 
     @property
     def name(self):
-        """ Name of database """
+        """Name of database."""
         return self._name
 
     @property
     def is_open(self):
-        """ Check if connection to the database is open """
+        """Check if connection to the database is open."""
         try:
             self._con.cursor()
             return True
@@ -202,7 +206,8 @@ class Database:
     @staticmethod
     def _build_where_like(query):
         """
-        Build a where query with like operator
+        Build a where query with like operator.
+
         Args:
             query (dict): A dict object contains key-value pairs to construct
                           a WHERE query
@@ -220,6 +225,7 @@ class Database:
     def region(self, region=None, return_type='df'):
         """
         Region data. region arg is used to filter results with LIKE statement.
+
         Args:
             region (str)      : Region to search in database
             return_type (str) : One of gen, list, long_list, [df]
@@ -244,8 +250,11 @@ class Database:
 
     def city(self, city=None, region=None, return_type='df'):
         """
-        City data. city|region args are used to filter results with 
+        City data.
+
+        city|region args are used to filter results with
         LIKE statement.
+
         Args:
             city (str)        : City to search in database
             region (str)      : Region to search in database
@@ -274,8 +283,11 @@ class Database:
 
     def station(self, station=None, city=None, region=None, return_type='df'):
         """
-        Station data. station|city|region args are used to filter results with
+        Station data.
+
+        station|city|region args are used to filter results with
         LIKE statement.
+
         Args:
             station (str)     : Station to search in database
             city (str)        : City to search in database
@@ -310,7 +322,8 @@ class Database:
     @staticmethod
     def _split(x, f):
         """
-        R-style split function
+        R-style split function.
+
         Args:
             x (list): List to be split
             f (list of str or tuple): Factor list split by
@@ -325,7 +338,8 @@ class Database:
     @staticmethod
     def _long_to_xarray(q):
         """
-        Convert long list query result to xarray
+        Convert long list query result to xarray.
+
         Args:
             q (list): Long-list result of query
         Return (xarray):
@@ -362,7 +376,8 @@ class Database:
     @staticmethod
     def _build_where(var, val):  # pylint: disable=R0912
         """
-        Build where part of the query
+        Build where part of the query.
+
         Args:
             var (str): Name of variable
             val (str, list, list of list): Value of variable
@@ -371,13 +386,13 @@ class Database:
         """
 
         def _to_ascii_(s):
-            """ Convert chars to ascii counterparts"""
+            """Convert chars to ascii counterparts."""
             for i, j in zip(list('ğüşıöçĞÜŞİÖÇ'), list('gusiocGUSIOC')):
                 s = s.replace(i, j)
             return s.lower()
 
         def _get_cmp_(val):
-            """ Get comparison values as tuple """
+            """Get comparison values as tuple."""
             ops = ('>=', '<=', '>', '<')
             if val.startswith(ops):
                 for o in ops:
@@ -425,7 +440,8 @@ class Database:
     @staticmethod
     def _build_select(select, where, table):
         """
-        Create a select statement for a table
+        Create a select statement for a table.
+
         Args:
             select (dict, list, str): A dictionary of key:value of boolean or
                 string of list or a comma sepereated values as string.
@@ -447,7 +463,7 @@ class Database:
 
     @staticmethod
     def _build_main_select_string(sel):
-        """ build select statement for the db query """
+        """Build select statement for the db query."""
         opt_select = dict(zip(Database._keys,
                               [True] * 7 + [False] * 7 + [True]))
         if isinstance(sel, str):
@@ -463,7 +479,7 @@ class Database:
 
     @staticmethod
     def _get_opt_queries(args, kwargs):
-        """ Get option queries from args """
+        """Get option queries from args."""
         opt_queries = dict.fromkeys(Database._keys, '')
         for a, k in zip(args, opt_queries.keys()):
             opt_queries[k] = a
@@ -475,7 +491,7 @@ class Database:
 
     @staticmethod
     def dropna(x):
-        """ Simplify xarray object by dropping all NA dims """
+        """Simplify xarray object by dropping all NA dims."""
         if not isinstance(x, _xr.core.dataarray.DataArray):
             raise ValueError('x must be a DataArray object')
         for d in tuple(d for d in x.dims if d != 'time'):
@@ -485,7 +501,8 @@ class Database:
     @staticmethod
     def to_netcdf(x, file):
         """
-        Save xarray as netcdf file
+        Save xarray as netcdf file.
+
         Args:
             x (DataArray or Dataset): xarray object
             file (str): File name to save
@@ -502,7 +519,8 @@ class Database:
 
     def _get_ids_for_tables(self, opt_queries):
         """
-        Get query results from side tables
+        Get query results from side tables.
+
         Args:
             opt_queries (dict): Query parameters
         Return (dict):
@@ -510,7 +528,7 @@ class Database:
         """
 
         def _end_points_(date_ids):
-            """ return end points of consecutive integers """
+            """Return end points of consecutive integers."""
             diff_date_ids = [date_ids[i] - date_ids[i - 1] for i in
                              range(1, len(date_ids))]
             endpi = [i for i, v in enumerate(diff_date_ids) if v != 1]
@@ -551,7 +569,7 @@ class Database:
         return where
 
     def _build_query(self, args, kwargs):
-        """ build query """
+        """Build query."""
         # args = ()
         # kwargs = {'pol': 'pm10', 'city': 'adana', 'sta': 'çatalan',
         #           'date': ['>=2015-01-01', '<=2019-01-01'], 'month': 3}
@@ -597,7 +615,7 @@ class Database:
 
     def _data_generator(self, query,  # pylint: disable=R0914,R0915
                         sel, opt_queries, include_nan=True):
-        """ Query result generator """
+        """Query result generator."""
 
         def get_cal_table(opt_queries):
             where = {k: opt_queries[k] for k in Database._keys_date}
@@ -684,7 +702,7 @@ class Database:
         cur.close()
 
     def _query_data(self, args, kwargs, as_list=False, include_nan=True):
-        """ Query database """
+        """Query database."""
         # args = ()
         # kwargs = {'pol': 'pm10', 'city': 'adana', 'sta': 'çatalan',
         #           'date': ['>=2015-01-01', '<=2019-01-01'], 'month': 3}
@@ -696,7 +714,8 @@ class Database:
 
     def query(self, *args, **kwargs):
         """
-        Query database by various arguments
+        Query database by various arguments.
+
         Args:
             param (str): parameter name
             reg   (str): Region Name
@@ -714,7 +733,6 @@ class Database:
             include_nan (bool): Include NaN in results?
             verbose     (bool): Detailed output
         """
-
         include_nan = True  # default NaN behaviour
         if 'include_nan' in kwargs.keys():
             include_nan = kwargs.pop('include_nan')
@@ -745,7 +763,7 @@ class Database:
         return ret
 
     def print_lic(self):
-        """ print license information """
+        """Print license information."""
         fn = os.path.join(options.db_path, self._name + '.LICENSE')
         if os.path.exists(fn):
             print(open(fn, "r").read())
@@ -755,7 +773,8 @@ class Database:
     @staticmethod
     def install(pth):  # pylint: disable=R0914
         """
-        Install a database
+        Install a database.
+
         Args:
             pth   (str): A local path or URL to database installation file
         """
@@ -808,7 +827,8 @@ class Database:
     @staticmethod
     def install_github(user, repo):
         """
-        Install a database from github
+        Install a database from github.
+
         Args:
             user (str): User nor organization name
             repo (str): repository name
@@ -818,5 +838,5 @@ class Database:
 
     @staticmethod
     def install_sample():
-        """ Install sample database """
+        """Install sample database."""
         Database.install_github('isezen', 'air-db.samp')
