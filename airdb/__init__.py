@@ -222,6 +222,26 @@ class Database:
             sql += 'AND'.join(where_clauses)
         return sql
 
+    def param(self, param=None, return_type='df'):
+        """
+        Region data. region arg is used to filter results with LIKE statement.
+
+        Args:
+            region (str)      : Region to search in database
+            return_type (str) : One of gen, list, long_list, [df]
+        Return: :
+            Region data
+        """
+        sel = 'id,name,long_name'
+        sql = f"""
+            SELECT
+                {sel}
+            FROM
+                param"""
+        sql += Database._build_where_like({'name': param})
+        self._cur = self._con.cursor().execute(sql + ';')
+        return self._return(return_type, sel.split(','))
+
     def region(self, region=None, return_type='df'):
         """
         Region data. region arg is used to filter results with LIKE statement.
@@ -336,7 +356,38 @@ class Database:
         return res
 
     @staticmethod
-    def _long_to_xarray(q):
+    def _concat_(x, dim_names, recursive=True):
+        if len(dim_names) != len(list(x.keys())[0]):
+            msg = "length of x.keys() must be equal to length of dim_names"
+            raise ValueError(msg)
+
+        g2 = list(set(i[:-1] for i in x.keys()))
+        g2 = [i[0] if len(i) == 1 else i for i in g2]
+        doms = {i: [] for i in g2}
+        for k in doms:
+            for k2, d2 in x.items():
+                k2 = k2[:-1]
+                if isinstance(k2, tuple):
+                    if len(k2) == 1:
+                        k2 = k2[0]
+                if k == k2:
+                    doms[k].append(d2)
+
+        # combine by last dim
+        doms = {k: _xr.concat(v, dim_names[-1]) if len(doms[k]) > 1 else v[0]
+                for k, v in doms.items()}
+
+        if recursive:
+            k = list(doms.keys())[0]
+            if not isinstance(k, str):
+                if len(k) > 1:
+                    if len(doms) > 1:
+                        return Database._concat_(doms, dim_names[:-1])
+
+        return doms
+
+    @staticmethod
+    def _long_to_xarray(q, dim_names, db_name, param_to_variable=False):
         """
         Convert long list query result to xarray.
 
@@ -345,32 +396,71 @@ class Database:
         Return (xarray):
             Combined xarray result of query
         """
-        n = 2
-        x = Database._split(list(map(list, zip(*q[-n:]))),
-                            list(map(tuple, zip(*q[:(len(q) - n)]))))
-        ll = []
-        for k, v in x.items():
-            pol, region, city, station, lat, lon = k
-            if lat is None:
-                lat = float('NaN')
-            if lon is None:
-                lon = float('NaN')
+        if not isinstance(dim_names, list):
+            raise ValueError('dim_names must be a list of strings')
+
+        if len(q) != len(dim_names):
+            msg = "length of q must be equal to length of dim_names"
+            raise ValueError(msg)
+
+        for d in ['date', 'value']:
+            dim_names.remove(d)
+
+        def _ts_to_xr(k, v):
+            coords = dict(zip(dim_names, [[i] for i in k]))
+
+            if 'sta' in coords.keys():
+                for j in ['lat', 'lon']:
+                    if j in coords.keys():
+                        if coords[j][0] is None:
+                            coords[j] = [float('NaN')]
+                        coords[j] = ('sta', coords[j])
+                if 'city' in coords.keys():
+                    sta_long = [j[0] for i, j in coords.items()
+                                if i in ['city', 'sta']]
+                    sta_long = [i.title() for i in sta_long]
+                    sta_long = " - ".join(sta_long)
+                    coords['sta_long'] = ('sta', [sta_long])
+                coords['has_measurement'] = ('sta', [True])
+
+            dims = [i for i in coords if i not in
+                    ['lat', 'lon', 'sta_long', 'has_measurement']]
+
             v = list(map(list, zip(*v)))
-            obs = _xr.DataArray(v[1], dims=['time'],
-                                coords={'time': (('time'), v[0])})
-            obs = obs.expand_dims(dict(zip(['pol', 'region', 'city', 'sta'],
-                                           [1, 1, 1, 1])))
-            obs = obs.assign_coords(pol=[pol], region=[region], city=[city],
-                                    sta=[station], lat=lat, lon=lon)
-            ll.append(obs)
+            obs = _xr.DataArray(v[1], dims=['date'],
+                                coords={'date': (('date'), v[0])})
+            obs = obs.expand_dims(dict(zip(dims, [1] * len(dims))))
+
+            obs = obs.assign_coords(coords)
+            return obs
+
+        x = Database._split(list(map(list, zip(*q[-2:]))),
+                            list(map(tuple, zip(*q[:(len(q) - 2)]))))
+        ll = {k: _ts_to_xr(k, v) for k, v in x.items()}
+
         if len(ll) > 0:
-            x = _xr.concat(ll, dim='sta')
-            # dims = x.dims[1:]
-            xarr = list(x)
-            for i, xa in enumerate(xarr):
-                xa.name = xa.coords['pol'].values.tolist()
-                xarr[i] = xa.drop('pol', dim=None)
-            return _xr.merge(xarr)
+            x2 = Database._concat_(ll, dim_names)
+
+            # TODO: Re-order coordinates
+
+            xarr = x2.copy()
+            for k, xa in xarr.items():
+                xa.name = xa.coords['param'].values.tolist()[0]
+
+            if param_to_variable:
+                for k, v in xarr.items():
+                    v.name = v.coords['param'].values.tolist()[0]
+                    xarr[k] = v[0].drop('param')
+                da = _xr.merge(list(xarr.values()), compat='override')
+            else:
+                da = _xr.concat(xarr.values(), dim='param')
+                da.name = db_name
+
+            if 'has_measurement' in da.coords.keys():
+                da.coords['has_measurement'].values = da.coords['has_measurement'] == 1
+
+            return da
+
         return None
 
     @staticmethod
@@ -451,29 +541,48 @@ class Database:
         """
         if isinstance(select, dict):
             select = ','.join([k for k, v in select.items() if v])
+
         if isinstance(select, list):
             select = ','.join([str(i) for i in select])
+
         where = {k: v for k, v in where.items()
                  if len(str(v)) > 0 and str(v) != '[]'}
         where = ' AND '.join(
             [Database._build_where(k, v) for k, v in where.items() if v != ''])
         if where != '':
             where = ' WHERE ' + where
+
         return 'SELECT ' + select + ' FROM ' + table + where
 
     @staticmethod
     def _build_main_select_string(sel):
         """Build select statement for the db query."""
-        opt_select = dict(zip(Database._keys,
-                              [True] * 7 + [False] * 7 + [True]))
+        opt_select = {'param': True, 'reg': False,
+                      'city': True, 'sta': True,
+                      'lat': False, 'lon': False,
+                      'year': False, 'month': False,
+                      'day': False, 'hour': False,
+                      'week': False, 'doy': False,
+                      'hoy': False, 'date': True, 'value': True}
+
         if isinstance(sel, str):
             sel = sel.split(',')
+
         if isinstance(sel, list):
+
+            for i in ['param', 'city', 'sta', 'date', 'value']:
+                if i not in sel:
+                    sel += [i]
+
             if any(s in opt_select.keys() for s in sel):
                 opt_select = {k: False for k in opt_select.keys()}
                 for s in sel:
                     if s in opt_select.keys():
                         opt_select[s] = True
+        else:
+            raise ValueError('select string must be comma seperated string' +
+                             ' or list of strings.')
+
         return ','.join([list(opt_select.keys())[i] for i, x in
                          enumerate(list(opt_select.values())) if x])
 
@@ -489,12 +598,30 @@ class Database:
                 opt_queries[k] = kwargs[k]
         return opt_queries
 
+    def _check_opt_queries(self, opt_queries):
+        """Check option queries from args."""
+        for k, v in opt_queries.items():
+            if isinstance(v, str):
+                v = [v]
+            for i in v:
+                if i != '':
+                    if k == 'param':
+                        x = self.param(i, return_type='list')
+                    if k == 'reg':
+                        x = self.region(i, return_type='list')
+                    if k == 'city':
+                        x = self.city(i, return_type='list')
+                    if k == 'sta':
+                        x = self.station(i, return_type='list')
+                    if len(x) == 0:
+                        raise ValueError(f"{k}: '{i}' does not exist.")
+
     @staticmethod
     def dropna(x):
         """Simplify xarray object by dropping all NA dims."""
         if not isinstance(x, _xr.core.dataarray.DataArray):
             raise ValueError('x must be a DataArray object')
-        for d in tuple(d for d in x.dims if d != 'time'):
+        for d in tuple(d for d in x.dims if d != 'date'):
             x = x.dropna(dim=d, how='all')
         return x
 
@@ -578,6 +705,7 @@ class Database:
         select = Database._build_main_select_string(select)
 
         opt_queries = Database._get_opt_queries(args, kwargs)
+        self._check_opt_queries(opt_queries)
         where_ids = self._get_ids_for_tables(opt_queries)
         select_data = Database._build_select('*', where_ids, 'data')
         sql = """
@@ -745,6 +873,7 @@ class Database:
         data, colnames, query = self._query_data(
             args, kwargs, as_list=self._return_type == 'list',
             include_nan=include_nan)
+
         if verbose:
             print(query)
         ret = data
@@ -753,8 +882,12 @@ class Database:
         elif self._return_type == 'df':
             ret = pd.DataFrame(data, columns=colnames)
         elif self._return_type == 'xarray':
+            param_to_variable = False
+            if 'param_to_variable' in kwargs.keys():
+                param_to_variable = kwargs.pop('param_to_variable')
             ret = list(map(list, zip(*data)))
-            ret = Database._long_to_xarray(ret)
+            ret = Database._long_to_xarray(ret, colnames,
+                                           self.name, param_to_variable)
 
         t2 = time()
         elapsed = t2 - t1
