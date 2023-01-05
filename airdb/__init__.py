@@ -17,6 +17,9 @@ date    : 2021
 from collections import defaultdict
 from contextlib import closing
 from time import time
+from warnings import warn as _warn
+import itertools as _itertools
+from collections.abc import Iterable as _Iterable
 
 import os
 import sqlite3 as sq
@@ -24,7 +27,7 @@ import pandas as pd
 import xarray as _xr
 import numpy as _np
 
-__version__ = '0.0.5'
+__version__ = '0.0.7'
 __author__ = 'Ismail SEZEN'
 __email__ = 'sezenismail@gmail.com'
 __license__ = 'AGPLv3'
@@ -301,7 +304,8 @@ class Database:
         self._cur = self._con.cursor().execute(sql + ';')
         return self._return(return_type, sel.split(','))
 
-    def station(self, station=None, city=None, region=None, return_type='df'):
+    def station(self, station=None, city=None, region=None,
+                select=None, return_type='df'):
         """
         Station data.
 
@@ -317,6 +321,8 @@ class Database:
             Station data
         """
         sel = 'id,region,city,station,lat,lon'
+        if select is not None:
+            sel = ','.join([sel] + select)
         sql = f"""
             SELECT
                 {sel}
@@ -338,6 +344,41 @@ class Database:
                                            'region': region})
         self._cur = self._con.cursor().execute(sql + ';')
         return self._return(return_type, sel.split(','))
+
+    def measurement(self, return_type='df'):
+        """
+        Measurements data
+
+        If a parameter is measured in a station, result is True,
+        otherwise False.
+
+        Args:
+            return_type (str) : One of gen, list, long_list, [df]
+        Return: :
+            Measurement data
+        """
+
+        def expandgrid(*itrs):
+            """Expand iterables."""
+            v = [x if isinstance(x, _Iterable) else [x]
+                 for i, x in enumerate(itrs)]
+            product = list(_itertools.product(*v))
+            x = list({f'Var{i + 1}': [x[i] for x in product]
+                      for i in range(len(v))}.values())
+            return map(list, zip(*x))
+
+        def exist(p, c, s):
+            for _ in self._query(param=p, city=c, sta=s):
+                return True
+            return False
+
+        param = self.param(return_type='long_list')[1]
+        s = self.station(return_type='long_list')
+        city_station = list(map(tuple, zip(*[s[2], s[3]])))
+        pcs = [[p, j[0], j[1]] for p, j in
+               list(expandgrid(param, city_station))]
+
+        m = [exist(p, c, s) for p, c, s in pcs]
 
     @staticmethod
     def _split(x, f):
@@ -396,11 +437,14 @@ class Database:
         Return (xarray):
             Combined xarray result of query
         """
+        if len(q) == 0:
+            raise ValueError('q cannot be empty.')
+
         if not isinstance(dim_names, list):
-            raise ValueError('dim_names must be a list of strings')
+            raise ValueError('dim_names must be a list of strings.')
 
         if len(q) != len(dim_names):
-            msg = "length of q must be equal to length of dim_names"
+            msg = "length of q must be equal to length of dim_names."
             raise ValueError(msg)
 
         for d in ['date', 'value']:
@@ -464,6 +508,13 @@ class Database:
         return None
 
     @staticmethod
+    def _to_ascii_(s):
+        """Convert chars to ascii counterparts."""
+        for i, j in zip(list('ğüşıöçĞÜŞİÖÇ'), list('gusiocGUSIOC')):
+            s = s.replace(i, j)
+        return s.lower()
+
+    @staticmethod
     def _build_where(var, val):  # pylint: disable=R0912
         """
         Build where part of the query.
@@ -474,12 +525,6 @@ class Database:
         Return (str):
             A where statement for query
         """
-
-        def _to_ascii_(s):
-            """Convert chars to ascii counterparts."""
-            for i, j in zip(list('ğüşıöçĞÜŞİÖÇ'), list('gusiocGUSIOC')):
-                s = s.replace(i, j)
-            return s.lower()
 
         def _get_cmp_(val):
             """Get comparison values as tuple."""
@@ -512,7 +557,8 @@ class Database:
                     ret = '(' + ret + ')'
                 else:
                     ret = var + ' IN (' + \
-                          ','.join(['\'' + str(i) + '\'' for i in val]) + ')'
+                          ','.join(['\'' + _to_ascii_(str(i)).lower() + '\''
+                                   for i in val]) + ')'
             elif all(isinstance(v, list) for v in val):  # all is list
                 val = [['>=' + str(v[0]), '<=' + str(v[1])] for v in val]
                 ret = '(' + ' OR '.join(
@@ -547,6 +593,7 @@ class Database:
 
         where = {k: v for k, v in where.items()
                  if len(str(v)) > 0 and str(v) != '[]'}
+
         where = ' AND '.join(
             [Database._build_where(k, v) for k, v in where.items() if v != ''])
         if where != '':
@@ -605,6 +652,7 @@ class Database:
                 v = [v]
             for i in v:
                 if i != '':
+                    i = Database._to_ascii_(i)
                     if k == 'param':
                         x = self.param(i, return_type='list')
                     if k == 'reg':
@@ -839,6 +887,12 @@ class Database:
         if as_list:
             ret = list(ret)
         return ret, sel, query
+
+    def _query(self, *args, **kwargs):
+        """Query database (Internal)."""
+        data, _, _ = self._query_data(
+            args, kwargs, include_nan=False)
+        return data
 
     def query(self, *args, **kwargs):
         """
