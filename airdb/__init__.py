@@ -27,7 +27,7 @@ import pandas as pd
 import xarray as _xr
 import numpy as _np
 
-__version__ = '0.0.7'
+__version__ = '0.0.8'
 __author__ = 'Ismail SEZEN'
 __email__ = 'sezenismail@gmail.com'
 __license__ = 'AGPLv3'
@@ -225,6 +225,16 @@ class Database:
             sql += 'AND'.join(where_clauses)
         return sql
 
+    @staticmethod
+    def _to_ascii_(s):
+        """Convert chars to ascii counterparts."""
+        if s is not None:
+            for i, j in zip(list('ğüşıöçĞÜŞİÖÇ'), list('gusiocGUSIOC')):
+                s = s.replace(i, j)
+            return s.lower()
+        else:
+            return s
+
     def param(self, param=None, return_type='df'):
         """
         Region data. region arg is used to filter results with LIKE statement.
@@ -285,7 +295,9 @@ class Database:
         Return: :
             City data
         """
-        sel = 'id,region,city,ascii,lat,lon'
+        city = Database._to_ascii_(city)
+        # region = Database._to_ascii_(region)
+        sel = 'id,region,city,lat,lon'
         sql = f"""
             SELECT
                 {sel}
@@ -293,8 +305,7 @@ class Database:
             (SELECT
                 city.id AS id,
                 reg.name AS region,
-                city.nametr AS city,
-                city.name AS ascii,
+                city.name AS city,
                 city.lat AS lat,
                 city.lon AS lon
             FROM
@@ -320,6 +331,9 @@ class Database:
         Return: :
             Station data
         """
+        region = Database._to_ascii_(region)
+        city = Database._to_ascii_(city)
+        station = Database._to_ascii_(station)
         sel = 'id,region,city,station,lat,lon'
         if select is not None:
             sel = ','.join([sel] + select)
@@ -330,9 +344,8 @@ class Database:
             (SELECT
                 sta.id AS id,
                 reg.name AS region,
-                city.nametr AS city,
-                sta.nametr AS station,
-                sta.name AS ascii,
+                city.name AS city,
+                sta.name AS station,
                 city.lat AS lat,
                 city.lon AS lon
             FROM
@@ -508,13 +521,6 @@ class Database:
         return None
 
     @staticmethod
-    def _to_ascii_(s):
-        """Convert chars to ascii counterparts."""
-        for i, j in zip(list('ğüşıöçĞÜŞİÖÇ'), list('gusiocGUSIOC')):
-            s = s.replace(i, j)
-        return s.lower()
-
-    @staticmethod
     def _build_where(var, val):  # pylint: disable=R0912
         """
         Build where part of the query.
@@ -545,7 +551,7 @@ class Database:
                 ret = Database._build_where(var, val.split(','))
             else:
                 cmp, val = _get_cmp_(val)
-                val = _to_ascii_(val).lower()
+                val = Database._to_ascii_(val).lower()
                 if not val.isnumeric():
                     val = '\'' + val + '\''
                 ret = cmp.join([var, val])
@@ -557,7 +563,7 @@ class Database:
                     ret = '(' + ret + ')'
                 else:
                     ret = var + ' IN (' + \
-                          ','.join(['\'' + _to_ascii_(str(i)).lower() + '\''
+                          ','.join(['\'' + Database._to_ascii_(str(i)).lower() + '\''
                                    for i in val]) + ')'
             elif all(isinstance(v, list) for v in val):  # all is list
                 val = [['>=' + str(v[0]), '<=' + str(v[1])] for v in val]
@@ -652,7 +658,6 @@ class Database:
                 v = [v]
             for i in v:
                 if i != '':
-                    i = Database._to_ascii_(i)
                     if k == 'param':
                         x = self.param(i, return_type='list')
                     if k == 'reg':
