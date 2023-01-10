@@ -34,6 +34,26 @@ __license__ = 'AGPLv3'
 __year__ = '2021'
 
 
+class DatabaseVersionError(Exception):
+    """Exception raised for errors Database version mismatch."""
+
+    def __init__(self, db_version, target_version, message=None):
+        """
+        Create a DatabaseVersionError.
+
+        Args:
+            version (str): Database version
+            message (str): Error message
+        """
+        self.db_version = db_version
+        self.target_version = target_version
+        if message is None:
+            message = "Database version must be greater than " + \
+                f"{target_version}. Current version is {db_version}."
+        self.message = message
+        super().__init__(self.message)
+
+
 class _Singleton(type):
     _instances = {}
 
@@ -123,12 +143,10 @@ class Database:
         self._return_type = return_type
         self._con = sq.connect(self._path, detect_types=sq.PARSE_DECLTYPES)
         self._cur = self._con.cursor()
+        target_version = 0.3
+        if self.version < target_version:
+            raise DatabaseVersionError(self.version, target_version)
         # self._set_table_method('id,name,lat,lon', 'reg', 'region')
-        # self._set_table_method('id,reg,nametr,lat,lon', 'city', 'city')
-        # self._set_table_method('id,city,nametr,cat,lat,lon', 'sta',
-        #                        'station')
-        self._set_table_method('name,long_name,short_name,unit', 'param',
-                               'parameter')
 
     def __enter__(self):
         """Return self in with statement."""
@@ -157,6 +175,15 @@ class Database:
     def name(self):
         """Name of database."""
         return self._name
+
+    @property
+    def version(self):
+        """Database version."""
+        sql = 'SELECT value FROM version'
+        self._cur = self._con.cursor().execute(sql)
+        v = self._return('list', 'value')[0][0]
+        v = "".join(i for i in v if i in "0123456789.")
+        return float(v)
 
     @property
     def is_open(self):
@@ -293,7 +320,7 @@ class Database:
         Args:
             name   (str, list) : Parameter to search in database
             select (str, list) : Select parameters
-                                 Possible values: ['id', 'long_name', 'unit']
+                                 Possible values: ['id']
             return_type (str)  : One of 'gen', 'list', 'long_list', ['df']
         Return:
             Parameter data
@@ -307,13 +334,64 @@ class Database:
             args.pop('select'),
             dict(
                 zip(['id', 'name', 'long_name', 'unit'],
-                    [False, True, False, False])))
+                    [False, True, True, True])))
 
         sql = f"""
             SELECT
                 {sel}
             FROM
-                param""" + Database._build_where_like(args)
+            (SELECT
+                param.id AS id,
+                param.name AS name,
+                param.long_name AS long_name,
+                unit.ascii AS unit
+            FROM
+                param
+            INNER JOIN unit ON unit.id = param.unit)""" + \
+            Database._build_where_like(args)
+
+        self._cur = self._con.cursor().execute(sql + ';')
+        return self._return(return_type, sel.split(','))
+
+    def unit(self, *args, **kwargs):
+        """
+        Get unit data.
+
+        Args:
+            name   (str, list) : Unit to search in database
+            param  (str, list) : Parameter to search in database
+            select (str, list) : Select parameters
+                                 Possible values: ['id']
+            return_type (str)  : One of 'gen', 'list', 'long_list', ['df']
+        Return:
+            Unit data
+        """
+        args = Database._get_args(
+            args, kwargs,
+            {'name': '', 'param': '', 'select': '', 'return_type': 'df'})
+        return_type = args.pop('return_type')
+
+        sel = Database._build_select_string(
+            args.pop('select'),
+            dict(
+                zip(['id', 'param', 'name', 'ascii', 'long_name', 'latex'],
+                    [False, True, True, True, True, True])))
+
+        sql = f"""
+            SELECT
+                {sel}
+            FROM
+            (SELECT
+                unit.id AS id,
+                param.name AS param,
+                unit.name AS name,
+                unit.ascii AS ascii,
+                unit.long_name AS long_name,
+                unit.latex AS latex
+            FROM
+                param
+            INNER JOIN unit ON unit.id = param.unit)""" + \
+            Database._build_where_like(args)
 
         self._cur = self._con.cursor().execute(sql + ';')
         return self._return(return_type, sel.split(','))
