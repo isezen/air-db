@@ -183,6 +183,19 @@ class Database:
             ret = pd.DataFrame(ret, columns=columns)
         return ret
 
+    @staticmethod
+    def _to_ascii_(s):
+        """Convert chars to ascii counterparts."""
+        if s is not None:
+            if isinstance(s, list):
+                return [Database._to_ascii_(i) for i in s]
+            if isinstance(s, str):
+                for i, j in zip(list('ğüşıöçĞÜŞİÖÇ'), list('gusiocGUSIOC')):
+                    s = s.replace(i, j)
+                return s.lower()
+            raise ValueError(f'Unknown Value ({s})')
+        return s
+
     def _set_table_method(self, sel, table_name, func_name):
 
         def add_doc(value):
@@ -218,180 +231,334 @@ class Database:
             WHERE query
         """
         sql = ''
-        if any(v is not None for v in query.values()):
-            sql += ' WHERE'
-            where_clauses = [f" {k} LIKE '{v.lower()}' " for k, v in
-                             query.items() if v is not None]
-            sql += 'AND'.join(where_clauses)
+        where_clauses = []
+        if any(v is not None and v != '' for v in query.values()):
+            where_clauses = []
+            for k, v in query.items():
+                if v is not None:
+                    if isinstance(v, list):
+                        where_clauses += [
+                            '(' + ' OR '.join(
+                                f"{k} LIKE '{i.lower()}'"
+                                for i in v if i != '' and i is not None) + ')']
+                    else:
+                        if isinstance(v, str) and v:
+                            where_clauses += [f"({k} LIKE '{v.lower()}')"]
+        if len(where_clauses) > 0:
+            if any(v is not None and v != '' for v in where_clauses):
+                sql += ' WHERE ' + ' AND '.join(where_clauses)
         return sql
 
     @staticmethod
-    def _to_ascii_(s):
-        """Convert chars to ascii counterparts."""
-        if s is not None:
-            for i, j in zip(list('ğüşıöçĞÜŞİÖÇ'), list('gusiocGUSIOC')):
-                s = s.replace(i, j)
-            return s.lower()
-        else:
-            return s
+    def _get_args(args, kwargs, default):
+        """Get option queries from args."""
+        arguments = default.copy()
+        for a, k in zip(args, arguments.keys()):
+            arguments[k] = a
 
-    def param(self, param=None, return_type='df'):
+        for k in kwargs.keys():
+            if k in arguments.keys():
+                arguments[k] = kwargs[k]
+                if arguments[k] is None:
+                    arguments[k] = default[k]
+            else:
+                raise ValueError(f"Unknown argument ({k})")
+        return arguments
+
+    @staticmethod
+    def _build_where2(args):
         """
-        Region data. region arg is used to filter results with LIKE statement.
+        Build a where query.
 
         Args:
-            region (str)      : Region to search in database
-            return_type (str) : One of gen, list, long_list, [df]
-        Return: :
-            Region data
+            args (dict): A dict object contains key-value pairs to construct
+                         a WHERE query
+        Return: (str):
+            WHERE query
         """
-        sel = 'id,name,long_name'
+        where = args.copy()
+        where = {k: v for k, v in where.items()
+                 if len(str(v)) > 0 and str(v) != '[]'}
+
+        where = ' AND '.join(
+            [Database._build_where(k, v) for k, v in where.items() if v != ''])
+        if where != '':
+            where = ' WHERE ' + where
+        return where
+
+    def param(self, *args, **kwargs):
+        """
+        Parameter data.
+
+        Args:
+            name   (str, list) : Parameter to search in database
+            select (str, list) : Select parameters
+                                 Possible values: ['id', 'long_name', 'unit']
+            return_type (str)  : One of 'gen', 'list', 'long_list', ['df']
+        Return:
+            Parameter data
+        """
+        args = Database._get_args(
+            args, kwargs,
+            {'name': '', 'select': '', 'return_type': 'df'})
+        return_type = args.pop('return_type')
+
+        sel = Database._build_select_string(
+            args.pop('select'),
+            dict(
+                zip(['id', 'name', 'long_name', 'unit'],
+                    [False, True, False, False])))
+
         sql = f"""
             SELECT
                 {sel}
             FROM
-                param"""
-        sql += Database._build_where_like({'name': param})
+                param""" + Database._build_where_like(args)
+
         self._cur = self._con.cursor().execute(sql + ';')
         return self._return(return_type, sel.split(','))
 
-    def region(self, region=None, return_type='df'):
+    def region(self, *args, **kwargs):
         """
-        Region data. region arg is used to filter results with LIKE statement.
+        Parameter data.
 
         Args:
-            region (str)      : Region to search in database
-            return_type (str) : One of gen, list, long_list, [df]
-        Return: :
+            name   (str, list) : Region to search in database
+            select (str, list) : Select parameters
+                                 Possible values:
+                                    ['id', 'nametr', 'lat', 'lon']
+            return_type (str)  : One of 'gen', 'list', 'long_list', ['df']
+        Return:
             Region data
         """
-        sel = 'id,region,lat,lon'
+        args = Database._get_args(
+            args, kwargs,
+            {'name': '', 'select': '', 'return_type': 'df'})
+        return_type = args.pop('return_type')
+        args['name'] = Database._to_ascii_(args['name'])
+
+        sel = Database._build_select_string(
+            args.pop('select'),
+            dict(
+                zip(['id', 'name', 'nametr', 'lat', 'lon'],
+                    [False, True, False, False, False])))
         sql = f"""
             SELECT
                 {sel}
             FROM
-            (SELECT
-                reg.id AS id,
-                reg.name AS region,
-                reg.lat AS lat,
-                reg.lon AS lon
-            FROM
-                reg)"""
-        sql += Database._build_where_like({'region': region})
+                reg""" + Database._build_where_like(args)
+
         self._cur = self._con.cursor().execute(sql + ';')
         return self._return(return_type, sel.split(','))
 
-    def city(self, city=None, region=None, return_type='df'):
+    def city(self, *args, **kwargs):
         """
         City data.
 
-        city|region args are used to filter results with
-        LIKE statement.
-
         Args:
-            city (str)        : City to search in database
-            region (str)      : Region to search in database
-            return_type (str) : One of gen, list, long_list, [df]
-        Return: :
+            name   (str, list) : City name to search in database.
+            region (str, list) : Region name to search in database.
+            select (str, list) : Select parameters
+                                 Possible values:
+                                    ['id', 'nametr', 'region', 'regiontr',
+                                     'lat', 'lon']
+            return_type (str)  : One of 'gen', 'list', 'long_list', ['df']
+        Return:
             City data
         """
-        city = Database._to_ascii_(city)
-        # region = Database._to_ascii_(region)
-        sel = 'id,region,city,lat,lon'
+        args = Database._get_args(
+            args, kwargs,
+            {'name': '', 'region': '', 'select': '', 'return_type': 'df'})
+        return_type = args.pop('return_type')
+        for k in list(args.keys())[0:2]:
+            args[k] = Database._to_ascii_(args[k])
+
+        sel = Database._build_select_string(
+            args.pop('select'),
+            dict(
+                zip(['region', 'regiontr', 'id', 'name', 'nametr',
+                     'lat', 'lon'],
+                    [True, False, False, True, False, False, False])))
+
         sql = f"""
             SELECT
                 {sel}
             FROM
             (SELECT
                 city.id AS id,
+                city.name AS name,
+                city.nametr AS nametr,
                 reg.name AS region,
-                city.name AS city,
+                reg.nametr AS regiontr,
                 city.lat AS lat,
                 city.lon AS lon
             FROM
                 city
-            INNER JOIN reg ON reg.id = city.reg)"""
-        sql += Database._build_where_like({'city': city, 'region': region})
-        self._cur = self._con.cursor().execute(sql + ';')
-        return self._return(return_type, sel.split(','))
+            INNER JOIN reg ON reg.id = city.reg)""" + \
+            Database._build_where_like(args)
 
-    def station(self, station=None, city=None, region=None,
-                select=None, return_type='df'):
+        self._cur = self._con.cursor().execute(sql + ';')
+        ret = self._return(return_type, sel.split(','))
+        if return_type == 'df':
+            cols = ret.columns.tolist()
+            for n in ['id', 'name', 'nametr', 'lat', 'lon']:
+                if n in cols:
+                    cols.remove(n)
+            ret = ret.set_index(cols)
+        return ret
+
+    def station(self, *args, **kwargs):
         """
         Station data.
 
-        station|city|region args are used to filter results with
-        LIKE statement.
-
         Args:
-            station (str)     : Station to search in database
-            city (str)        : City to search in database
-            region (str)      : Region to search in database
-            return_type (str) : One of gen, list, long_list, [df]
-        Return: :
+            name   (str, list) : Station name to search in database.
+            city   (str, list) : City name to search in database.
+            region (str, list) : Region name to search in database.
+            select (str, list) : Select parameters
+                                 Possible values:
+                                    ['id', 'nametr', 'region', 'regiontr',
+                                     'lat', 'lon']
+            return_type (str)  : One of 'gen', 'list', 'long_list', ['df']
+        Return:
             Station data
         """
-        region = Database._to_ascii_(region)
-        city = Database._to_ascii_(city)
-        station = Database._to_ascii_(station)
-        sel = 'id,region,city,station,lat,lon'
-        if select is not None:
-            sel = ','.join([sel] + select)
+        args = Database._get_args(
+            args, kwargs,
+            {'name': '', 'city': '', 'region': '', 'select': '',
+             'return_type': 'df'})
+        return_type = args.pop('return_type')
+        for k in list(args.keys())[0:3]:
+            args[k] = Database._to_ascii_(args[k])
+
+        sel = Database._build_select_string(
+            args.pop('select'),
+            dict(
+                zip(['region', 'regiontr', 'id', 'city', 'citytr',
+                     'name', 'nametr', 'lat', 'lon'],
+                    [True, False, False, True, False,
+                     True, False, False, False])))
+
         sql = f"""
             SELECT
                 {sel}
             FROM
             (SELECT
                 sta.id AS id,
-                reg.name AS region,
+                sta.name AS name,
                 city.name AS city,
-                sta.name AS station,
+                city.nametr AS citytr,
+                reg.name AS region,
+                reg.nametr AS regiontr,
                 city.lat AS lat,
                 city.lon AS lon
             FROM
                 sta
             INNER JOIN reg ON reg.id = city.reg
-            INNER JOIN city ON city.id = sta.city)"""
-        sql += Database._build_where_like({'station': station,
-                                           'city': city,
-                                           'region': region})
-        self._cur = self._con.cursor().execute(sql + ';')
-        return self._return(return_type, sel.split(','))
+            INNER JOIN city ON city.id = sta.city)""" + \
+            Database._build_where_like(args)
 
-    def measurement(self, return_type='df'):
+        self._cur = self._con.cursor().execute(sql + ';')
+        ret = self._return(return_type, sel.split(','))
+        if return_type == 'df':
+            cols = ret.columns.tolist()
+            for n in ['id', 'name', 'nametr', 'lat', 'lon']:
+                if n in cols:
+                    cols.remove(n)
+            ret = ret.set_index(cols)
+        return ret
+
+    def measured(self, *args, **kwargs):
         """
-        Measurements data
+        Show measured parameters by city - station.
 
         If a parameter is measured in a station, result is True,
         otherwise False.
 
         Args:
-            return_type (str) : One of gen, list, long_list, [df]
+            param       (str, list) : Parameter(s) to search in database
+            region      (str, list) : Region(s) to search in database
+            city        (str, list) : City/cities to search in database
+            station     (str, list) : Station(s) to search in database
+
+            select      (str, list) : Select parameters
+                                      Possible values: ['id', 'region']
+            wide        (bool)      : Convert to wide DataFrame
+                                      if return_type='df'. Default is False.
+            as_str      (bool)      : Convert True to 'X' and False to ''
+                                      if return_type='df'
+            return_type (str)       : One of 'gen', 'list', 'long_list', ['df']
         Return: :
-            Measurement data
+            Measured data for stations
         """
+        # Get default function arguments
+        args = Database._get_args(
+            args, kwargs,
+            {'param': '', 'region': '', 'city': '',
+             'station': '', 'select': '', 'wide': False,
+             'as_str': False, 'return_type': 'df'})
 
-        def expandgrid(*itrs):
-            """Expand iterables."""
-            v = [x if isinstance(x, _Iterable) else [x]
-                 for i, x in enumerate(itrs)]
-            product = list(_itertools.product(*v))
-            x = list({f'Var{i + 1}': [x[i] for x in product]
-                      for i in range(len(v))}.values())
-            return map(list, zip(*x))
+        wide = args.pop('wide')
+        as_str = args.pop('as_str')
+        return_type = args.pop('return_type')
+        for k in list(args.keys())[0:4]:
+            args[k] = Database._to_ascii_(args[k])
 
-        def exist(p, c, s):
-            for _ in self._query(param=p, city=c, sta=s):
-                return True
-            return False
+        sel = Database._build_select_string(
+            args.pop('select'),
+            dict(
+                zip(['param', 'region', 'city', 'id', 'station', 'value'],
+                    [True, True, True, False, True, True])))
+        sql = f"""
+            SELECT
+                {sel}
+            FROM
+            (SELECT
+                param.name AS param,
+                reg.name AS region,
+                city.name AS city,
+                sta.id AS id,
+                sta.name AS station,
+                measurement.value AS value
+            FROM
+                measurement
+            INNER JOIN sta ON sta.id = measurement.sta
+            INNER JOIN param ON param.id = measurement.param
+            INNER JOIN city ON city.id = sta.city
+            INNER JOIN reg ON reg.id = city.reg)""" + \
+            Database._build_where_like(args)
 
-        param = self.param(return_type='long_list')[1]
-        s = self.station(return_type='long_list')
-        city_station = list(map(tuple, zip(*[s[2], s[3]])))
-        pcs = [[p, j[0], j[1]] for p, j in
-               list(expandgrid(param, city_station))]
+        self._cur = self._con.cursor().execute(sql + ';')
+        df = self._return('df', sel.split(','))
+        T = 'X' if as_str else True
+        F = '' if as_str else False
+        df['value'] = T
+        cols = df.columns.tolist()
+        cols.remove('value')
+        if wide:
+            cols.remove('param')
+            df = df.pivot(index=cols,
+                          columns='param',
+                          values='value')
+            df = df.replace(_np.nan, F)
 
-        m = [exist(p, c, s) for p, c, s in pcs]
+        else:
+            df = df.set_index(cols)
+
+        if return_type != 'df':
+            df = df.reset_index()
+            df = [v.to_list() for k, v in df.items()]
+            if return_type == 'list':
+                df = list(map(list, zip(*df)))
+            if return_type == 'gen':
+                df = list(map(list, zip(*df)))
+
+                def generator():
+                    for i in df:
+                        yield i
+                return generator()
+
+        return df
 
     @staticmethod
     def _split(x, f):
@@ -608,6 +775,28 @@ class Database:
         return 'SELECT ' + select + ' FROM ' + table + where
 
     @staticmethod
+    def _build_select_string(sel, default):
+        """Build select statement for the db query."""
+        opt_select = default.copy()
+
+        if isinstance(sel, str):
+            sel = sel.split(',')
+
+        if isinstance(sel, list):
+
+            if any(s in opt_select.keys() for s in sel):
+                for s in sel:
+                    if s in opt_select.keys():
+                        opt_select[s] = True
+        else:
+            if sel is not None:
+                raise ValueError('select string must be comma seperated ' +
+                                 'string or list of strings.')
+
+        return ','.join([list(opt_select.keys())[i] for i, x in
+                         enumerate(list(opt_select.values())) if x])
+
+    @staticmethod
     def _build_main_select_string(sel):
         """Build select statement for the db query."""
         opt_select = {'param': True, 'reg': False,
@@ -794,8 +983,13 @@ class Database:
                 select.split(','),
                 opt_queries)
 
-    def _data_generator(self, query,  # pylint: disable=R0914,R0915
-                        sel, opt_queries, include_nan=True):
+    def _data_generator(  # pylint: disable=R0914,R0915
+        self,
+        query,
+        sel,
+        opt_queries,
+        include_nan=True
+    ):
         """Query result generator."""
 
         def get_cal_table(opt_queries):
