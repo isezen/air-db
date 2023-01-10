@@ -27,7 +27,7 @@ import pandas as pd
 import xarray as _xr
 import numpy as _np
 
-__version__ = '0.0.8'
+__version__ = '0.0.9'
 __author__ = 'Ismail SEZEN'
 __email__ = 'sezenismail@gmail.com'
 __license__ = 'AGPLv3'
