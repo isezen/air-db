@@ -5,7 +5,7 @@ airdb package.
 A data access layer (DAL) to easily query environmental time series datasets
 obtained from various sources.
 
-version : 0.0.9
+version : 0.1.1
 github  : https://github.com/isezen/airdb
 author  : Ismail SEZEN
 email   : sezenismail@gmail.com
@@ -32,7 +32,7 @@ from . import utils as _utils
 from .utils import Build as _build
 from .__errors__ import DatabaseVersionError as _DatabaseVersionError
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 __author__ = 'Ismail SEZEN'
 __email__ = 'sezenismail@gmail.com'
 __license__ = 'AGPLv3'
@@ -399,6 +399,18 @@ class Database:
 
     # %%--------
 
+    def is_measured(self, param, city, station):
+        """
+        Check if a single parameter is measured at station or not.
+
+        Args:
+            param   (str) : Parameter to search in database
+            city    (str) : City to search in database
+            station (str) : Station to search in database
+        """
+        return len(self.measured(param, city, station,
+                   return_type='list')) > 0
+
     def query(self, *args, **kwargs):
         """
         Query database by various arguments.
@@ -696,9 +708,9 @@ class Database:
 
         Args:
             param       (str, list) : Parameter(s) to search in database
-            region      (str, list) : Region(s) to search in database
             city        (str, list) : City/cities to search in database
             station     (str, list) : Station(s) to search in database
+            region      (str, list) : Region(s) to search in database
 
             select      (str, list) : Select parameters
                                       Possible values: ['id', 'region']
@@ -713,8 +725,8 @@ class Database:
         # Get default function arguments
         args = _utils.get_args(
             args, kwargs,
-            {'param': '', 'region': '', 'city': '',
-             'station': '', 'select': '', 'wide': False,
+            {'param': '', 'city': '', 'station': '',
+             'region': '', 'select': '', 'wide': False,
              'as_str': False, 'return_type': 'df'})
 
         wide = args.pop('wide')
