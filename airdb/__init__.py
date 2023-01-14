@@ -32,7 +32,7 @@ from . import utils as _utils
 from .utils import Build as _build
 from .__errors__ import DatabaseVersionError as _DatabaseVersionError
 
-__version__ = '0.1.2'
+__version__ = '0.1.3'
 __author__ = 'Ismail SEZEN'
 __email__ = 'sezenismail@gmail.com'
 __license__ = 'AGPLv3'
@@ -177,22 +177,22 @@ class Database:
 
         def _check_opt_queries(opt_queries):
             """Check option queries from args."""
-            for k, v in opt_queries.items():
-                if isinstance(v, str):
+            x = {k: v for k, v in opt_queries.items()
+                 if k in ["param", "reg", "city", "sta"]}
+            for k, v in x.items():
+                if isinstance(v, (int, str)):
                     v = [v]
                 for i in v:
                     if i != '':
                         x = []
                         if k == 'param':
                             x = self.param(i, return_type='list')
-                        if k == 'reg':
+                        elif k == 'reg':
                             x = self.region(i, return_type='list')
-                        if k == 'city':
+                        elif k == 'city':
                             x = self.city(i, return_type='list')
-                        if k == 'sta':
+                        elif k == 'sta':
                             x = self.station(i, return_type='list')
-                        if k == 'date':
-                            x = [1]
                         if len(x) == 0:
                             raise ValueError(f"{k}: '{i}' does not exist.")
 
