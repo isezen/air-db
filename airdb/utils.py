@@ -11,7 +11,14 @@ import xarray as _xr
 
 
 def to_ascii(s):
-    """Convert chars to ascii counterparts."""
+    """
+    Convert chars to ascii counterparts.
+
+    Args:
+        s (str, list): Value to convert ascii.
+    Return (str, list):
+        Converted objects
+    """
     if s is not None:
         if isinstance(s, list):
             return [to_ascii(i) for i in s]
