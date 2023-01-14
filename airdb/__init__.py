@@ -32,7 +32,7 @@ from . import utils as _utils
 from .utils import Build as _build
 from .__errors__ import DatabaseVersionError as _DatabaseVersionError
 
-__version__ = '0.1.1'
+__version__ = '0.1.2'
 __author__ = 'Ismail SEZEN'
 __email__ = 'sezenismail@gmail.com'
 __license__ = 'AGPLv3'
@@ -191,6 +191,8 @@ class Database:
                             x = self.city(i, return_type='list')
                         if k == 'sta':
                             x = self.station(i, return_type='list')
+                        if k == 'date':
+                            x = [1]
                         if len(x) == 0:
                             raise ValueError(f"{k}: '{i}' does not exist.")
 
