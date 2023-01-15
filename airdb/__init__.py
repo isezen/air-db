@@ -32,7 +32,7 @@ from . import utils as _utils
 from .utils import Build as _build
 from .__errors__ import DatabaseVersionError as _DatabaseVersionError
 
-__version__ = '0.1.4'
+__version__ = '0.1.5'
 __author__ = 'Ismail SEZEN'
 __email__ = 'sezenismail@gmail.com'
 __license__ = 'AGPLv3'
@@ -182,19 +182,10 @@ class Database:
             for k, v in x.items():
                 if isinstance(v, (int, str)):
                     v = [v]
+                exist = getattr(Database, f'exist_{k}')
                 for i in v:
-                    if i != '':
-                        x = []
-                        if k == 'param':
-                            x = self.param(i, return_type='list')
-                        elif k == 'reg':
-                            x = self.region(i, return_type='list')
-                        elif k == 'city':
-                            x = self.city(i, return_type='list')
-                        elif k == 'sta':
-                            x = self.station(i, return_type='list')
-                        if len(x) == 0:
-                            raise ValueError(f"{k}: '{i}' does not exist.")
+                    if i != '' and not exist(self, i):
+                        raise ValueError(f"{k}: '{i}' does not exist.")
 
         def _get_ids_for_tables(opt_queries):
             """
@@ -413,6 +404,54 @@ class Database:
         return len(self.measured(param, city, station,
                    return_type='list')) > 0
 
+    def exist_param(self, name):
+        """
+        Check if parameter exists or not.
+
+        Args:
+            name (str) : Parameter to search in database
+        Return:
+            True/False
+        """
+        return len(self.param(name, return_type='list')) > 0
+
+    def exist_reg(self, name):
+        """
+        Check if region exists or not.
+
+        Args:
+            name (str) : Region to search in database
+        Return:
+            True/False
+        """
+        return len(self.reg(name, return_type='list')) > 0
+
+    def exist_city(self, name, region=''):
+        """
+        Check if city exists or not.
+
+        Args:
+            name   (str) : City name to search in database.
+            region (str) : Region name to search in database.
+                                 [Default: Empty]
+        Return:
+            True/False
+        """
+        return len(self.city(name, region, return_type='list')) > 0
+
+    def exist_sta(self, name, city='', region=''):
+        """
+        Check if station exist or not.
+
+        Args:
+            name   (str) : Station name to search in database.
+            city   (str) : City name to search in database [Default: Empty].
+            region (str) : Region name to search in database [Default: Empty].
+        Return:
+            True/False
+        """
+        return len(self.sta(name, city, region, return_type='list')) > 0
+
     def query(self, *args, **kwargs):
         """
         Query database by various arguments.
@@ -551,7 +590,7 @@ class Database:
         self._cur = self._con.cursor().execute(sql + ';')
         return self._return(return_type, sel.split(','))
 
-    def region(self, *args, **kwargs):
+    def reg(self, *args, **kwargs):
         """
         Parameter data.
 
@@ -640,7 +679,7 @@ class Database:
             ret = ret.set_index(cols)
         return ret
 
-    def station(self, *args, **kwargs):
+    def sta(self, *args, **kwargs):
         """
         Station data.
 
