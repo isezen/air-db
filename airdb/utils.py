@@ -104,7 +104,7 @@ def long_to_xarray(q, dim_names, db_name, param_to_variable=False):
         Combined xarray result of query
     """
     if len(q) == 0:
-        raise ValueError('q cannot be empty.')
+        return _xr.DataArray([], dims=['date'])
 
     if not isinstance(dim_names, list):
         raise ValueError('dim_names must be a list of strings.')

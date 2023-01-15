@@ -32,7 +32,7 @@ from . import utils as _utils
 from .utils import Build as _build
 from .__errors__ import DatabaseVersionError as _DatabaseVersionError
 
-__version__ = '0.1.3'
+__version__ = '0.1.4'
 __author__ = 'Ismail SEZEN'
 __email__ = 'sezenismail@gmail.com'
 __license__ = 'AGPLv3'
