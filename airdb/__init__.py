@@ -32,7 +32,7 @@ from . import utils as _utils
 from .utils import Build as _build
 from .__errors__ import DatabaseVersionError as _DatabaseVersionError
 
-__version__ = '0.1.5'
+__version__ = '0.1.6'
 __author__ = 'Ismail SEZEN'
 __email__ = 'sezenismail@gmail.com'
 __license__ = 'AGPLv3'
@@ -158,6 +158,18 @@ class Database:
 
     # %%--------
 
+    def _check_opt_queries(self, opt_queries):
+        """Check option queries from args."""
+        x = {k: v for k, v in opt_queries.items()
+             if k in ["param", "reg", "city", "sta"]}
+        for k, v in x.items():
+            if isinstance(v, (int, str)):
+                v = [v]
+            exist = getattr(Database, f'exist_{k}')
+            for i in v:
+                if i != '' and not exist(self, i):
+                    raise ValueError(f"{k}: '{i}' does not exist.")
+
     def _build_query(self, args, kwargs):
         """Build query."""
         # args = ()
@@ -174,18 +186,6 @@ class Database:
                 if k in opt_queries.keys():
                     opt_queries[k] = kwargs[k]
             return opt_queries
-
-        def _check_opt_queries(opt_queries):
-            """Check option queries from args."""
-            x = {k: v for k, v in opt_queries.items()
-                 if k in ["param", "reg", "city", "sta"]}
-            for k, v in x.items():
-                if isinstance(v, (int, str)):
-                    v = [v]
-                exist = getattr(Database, f'exist_{k}')
-                for i in v:
-                    if i != '' and not exist(self, i):
-                        raise ValueError(f"{k}: '{i}' does not exist.")
 
         def _get_ids_for_tables(opt_queries):
             """
@@ -244,7 +244,7 @@ class Database:
         # opt_queries = _get_opt_queries(args, kwargs)
         opt_queries = _utils.get_args(args, kwargs,
                                       dict.fromkeys(Database._keys, ''))
-        _check_opt_queries(opt_queries)
+        self._check_opt_queries(opt_queries)
         where_ids = _get_ids_for_tables(opt_queries)
         select_data = _build.select('*', where_ids, 'data')
         sql = """
