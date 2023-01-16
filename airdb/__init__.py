@@ -32,7 +32,7 @@ from . import utils as _utils
 from .utils import Build as _build
 from .__errors__ import DatabaseVersionError as _DatabaseVersionError
 
-__version__ = '0.1.6'
+__version__ = '0.1.7'
 __author__ = 'Ismail SEZEN'
 __email__ = 'sezenismail@gmail.com'
 __license__ = 'AGPLv3'
@@ -48,7 +48,6 @@ class Database:
     _keys_date = ('date', 'year', 'month', 'day', 'hour', 'week', 'doy', 'hoy')
     _keys = ('param', 'reg', 'city', 'sta', 'lat', 'lon') + _keys_date + \
             ('value',)
-
     # %%--------
 
     def __init__(self, name, return_type='gen'):
@@ -176,17 +175,6 @@ class Database:
         # kwargs = {'pol': 'pm10', 'city': 'adana', 'sta': 'çatalan',
         #           'date': ['>=2015-01-01', '<=2019-01-01'], 'month': 3}
 
-        def _get_opt_queries(args, kwargs):
-            """Get option queries from args."""
-            opt_queries = dict.fromkeys(Database._keys, '')
-            for a, k in zip(args, opt_queries.keys()):
-                opt_queries[k] = a
-            # get options from kwargs
-            for k in kwargs.keys():
-                if k in opt_queries.keys():
-                    opt_queries[k] = kwargs[k]
-            return opt_queries
-
         def _get_ids_for_tables(opt_queries):
             """
             Get query results from side tables.
@@ -241,11 +229,21 @@ class Database:
         select = kwargs.pop('select') if 'select' in kwargs.keys() else ''
         select = _build.main_select_string(select)
 
-        # opt_queries = _get_opt_queries(args, kwargs)
-        opt_queries = _utils.get_args(args, kwargs,
-                                      dict.fromkeys(Database._keys, ''))
-        self._check_opt_queries(opt_queries)
-        where_ids = _get_ids_for_tables(opt_queries)
+        args = _utils.get_args(args, kwargs,
+                               dict.fromkeys(Database._keys, ''))
+        # Check argument types
+        _utils.check_arg_types(
+            args,
+            {'param': (str, list), 'city': (str, list),
+             'sta': (str, list), 'reg': (str, list),
+             'date': (str, list),
+             'year': (str, list, int), 'month': (str, list, int),
+             'day': (str, list, int), 'hour': (str, list, int),
+             'week': (str, list, int), 'doy': (str, list, int),
+             'hoy': (str, list, int)})
+
+        self._check_opt_queries(args)
+        where_ids = _get_ids_for_tables(args)
         select_data = _build.select('*', where_ids, 'data')
         sql = """
             SELECT
@@ -278,7 +276,7 @@ class Database:
             INNER JOIN cal ON cal.id = data.date);"""
         return (sql.format(select=select, data=select_data),
                 select.split(','),
-                opt_queries)
+                args)
 
     def _generator(  # pylint: disable=R0914,R0915
         self,
@@ -457,18 +455,18 @@ class Database:
         Query database by various arguments.
 
         Args:
-            param (str): parameter name
-            reg   (str): Region Name
-            city  (str): City Name
-            sta   (str): Station Name
-            date  (str): Date
-            year  (str): Year
-            month (str): Month
-            day   (str): Day
-            hour  (str): Hour
-            week  (str): Week of year
-            doy   (str): Day of year
-            hoy   (str): Hour ofyear
+            param (str, list)      : parameter name
+            reg   (str, list)      : Region Name
+            city  (str, list)      : City Name
+            sta   (str, list)      : Station Name
+            date  (str, list)      : Date
+            year  (str, list, int) : Year
+            month (str, list, int) : Month
+            day   (str, list, int) : Day
+            hour  (str, list, int) : Hour
+            week  (str, list, int) : Week of year
+            doy   (str, list, int) : Day of year
+            hoy   (str, list, int) : Hour ofyear
         --
             include_nan (bool): Include NaN in results?
             verbose     (bool): Detailed output
