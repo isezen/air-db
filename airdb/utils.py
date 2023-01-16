@@ -94,6 +94,40 @@ def get_args(args, kwargs, default):
     return arguments
 
 
+def check_arg_types(args, default):
+    """
+    Check argument types.
+
+    If an argument does not conform to specified type,
+    raise TypeError.
+
+    Args:
+        args    (dict): A dict of arguments.
+        default (dict): A dict of default arguments and their types.
+    Return:
+        None
+    """
+    for k, v in args.items():
+        if k in default.keys() and not isinstance(v, default[k]):
+            raise TypeError(f"{k} must be type of {default[k]}")
+
+
+def check_is_empty_or_none(args):
+    """
+    Check arguments are empty.
+
+    If an argument is empty or None, raise ValueError.
+
+    Args:
+        args: (dict): A dict of arguments.
+    Return:
+        None
+    """
+    for k, v in args.items():
+        if v == '' or v is None:
+            raise ValueError(f"{k} cannot be empty or None")
+
+
 def long_to_xarray(q, dim_names, db_name, param_to_variable=False):
     """
     Convert long list query result to xarray.
