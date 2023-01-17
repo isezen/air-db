@@ -131,7 +131,7 @@ class DatabaseQueryArguments:
         args = merge_dict(self._args, x._args)  # pylint: disable=W0212
         rest = merge_dict(self._rest, x._rest)  # pylint: disable=W0212
         args.update(rest)
-        new = DatabaseQueryArguments(**args)
+        new = self.__class__(**args)
         for k, v in new._args.items():  # pylint: disable=W0212
             self.__dict__[k] = v
         self.__dict__['_args'] = new._args  # pylint: disable=W0212
