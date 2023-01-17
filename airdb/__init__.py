@@ -5,7 +5,7 @@ airdb package.
 A data access layer (DAL) to easily query environmental time series datasets
 obtained from various sources.
 
-version : 0.1.1
+version : 0.1.8
 github  : https://github.com/isezen/airdb
 author  : Ismail SEZEN
 email   : sezenismail@gmail.com
@@ -32,7 +32,7 @@ from . import utils as _utils
 from .utils import Build as _build
 from .__errors__ import DatabaseVersionError as _DatabaseVersionError
 
-__version__ = '0.1.7'
+__version__ = '0.1.8'
 __author__ = 'Ismail SEZEN'
 __email__ = 'sezenismail@gmail.com'
 __license__ = 'AGPLv3'
@@ -40,6 +40,155 @@ __year__ = '2021'
 
 
 options = _Options()
+
+
+class DatabaseQueryArguments:
+    """Database Query Arguments."""
+
+    _args_int = ['year', 'month', 'day', 'hour',
+                 'week', 'doy', 'hoy']
+    _names = ['param', 'city', 'sta', 'reg', 'date', 'select'] + _args_int
+    _types = [(str, list)] * 6 + [(str, int, list)] * 7
+    _values = [''] * (6 + 7)
+
+    def __init__(self, *args, **kwargs):
+        """
+        Initialize DatabaseQueryArguments object.
+
+        Args:
+            param (str, list)      : parameter name
+            city  (str, list)      : City Name
+            sta   (str, list)      : Station Name
+            reg   (str, list)      : Region Name
+
+            date  (str, list)      : Date
+            year  (int, str, list) : Year
+            month (int, str, list) : Month
+            day   (int, str, list) : Day
+            hour  (int, str, list) : Hour
+            week  (int, str, list) : Week of year
+            doy   (int, str, list) : Day of year
+            hoy   (int, str, list) : Hour ofyear
+        """
+        names = self.__class__._names
+        types = self.__class__._types
+        values = self.__class__._values
+
+        default_values = dict(zip(names, values))
+        default_types = dict(zip(names, types))
+        # Merge args and kwargs and set default values
+        args = _utils.get_args(args, kwargs, default_values)
+        dqa = [args.pop(k) for k, v in args.copy().items()
+               if isinstance(v, DatabaseQueryArguments)]
+        rest = {k: v for k, v in args.items() if k not in names}
+
+        args = {k: v for k, v in args.items() if k in names}
+        # Check argument types
+        _utils.check_arg_types(args, default_types)
+        _utils.int2str(args, self.__class__._args_int)
+        args = {k: _utils.split_str(v) for k, v in args.items()}
+
+        for k, v in args.items():
+            self.__dict__[k] = v
+        self.__dict__['_args'] = args
+        self._rest = rest
+        self._args = args
+
+        if len(dqa) > 0:
+            for i in dqa:
+                self.update(i)
+
+    def __repr__(self):
+        """Represent class object as a string."""
+        s = ''
+        for k, v in self._args.items():
+            if v is not None and v != '':
+                s += f' {k: <6}: {v}\n'
+        return 'empty' if s == '' else 'Arguments:\n' + s
+
+    def __setattr__(self, name, value):
+        """Set class attributes."""
+        if name in self._args.keys():
+            raise Exception("Read only property")
+        super().__setattr__(name, value)
+
+    def __iter__(self):
+        """Iterate over arguments."""
+        for k, v in self._args.items():
+            if v is not None and v != '':
+                yield (k, v)
+
+    def update(self, x):
+        """
+        Merge a DatabaseQueryArguments object to self.
+
+        Args:
+            x (DatabaseQueryArguments): A DatabaseQueryArguments object
+        """
+        if not isinstance(x, DatabaseQueryArguments):
+            raise ValueError('x must be a DatabaseQueryArguments object')
+        merge_dict = DatabaseQueryArguments._merge_dict
+        args = merge_dict(self._args, x._args)  # pylint: disable=W0212
+        rest = merge_dict(self._rest, x._rest)  # pylint: disable=W0212
+        args.update(rest)
+        new = DatabaseQueryArguments(**args)
+        for k, v in new._args.items():  # pylint: disable=W0212
+            self.__dict__[k] = v
+        self.__dict__['_args'] = new._args  # pylint: disable=W0212
+        self._rest = new._rest  # pylint: disable=W0212
+
+    @staticmethod
+    def _merge_dict(d1, d2):
+        result = dict(d1)
+        merge = DatabaseQueryArguments._merge
+        for k, v in d2.items():
+            result[k] = merge(result[k], v) if k in result else v
+        return result
+
+    @staticmethod
+    def _merge(x, y):
+        if not isinstance(x, list):
+            x = [x]
+        if not isinstance(y, list):
+            y = [y]
+        m = list(set(x + y))
+        if len(m) > 1:
+            return [i for i in m if i != '']
+        if len(m) == 1:
+            return m[0]
+        return m
+
+    @property
+    def rest(self):
+        """Unprocessed args."""
+        return self._rest
+
+    @property
+    def names(self):
+        """Database argument names."""
+        return list(self._args.keys())
+
+    def keys(self):
+        """Database argument names."""
+        return self._args.keys()
+
+    def values(self):
+        """Database argument values."""
+        return self._args.values()
+
+    def to_list(self, all_args=False):
+        """Get list of vargument values."""
+        if all_args:
+            return list(self._args.values())
+        return [v for v in self._args.values()
+                if v is not None and v != '']
+
+    def to_dict(self, all_args=False):
+        """Get dict of vargument values."""
+        if all_args:
+            return dict(self._args.items())
+        return {k: v for k, v in self._args.items()
+                if v is not None and v != ''}
 
 
 class Database:
@@ -169,7 +318,7 @@ class Database:
                 if i != '' and not exist(self, i):
                     raise ValueError(f"{k}: '{i}' does not exist.")
 
-    def _build_query(self, args, kwargs):
+    def _build_query(self, qa):
         """Build query."""
         # args = ()
         # kwargs = {'pol': 'pm10', 'city': 'adana', 'sta': 'çatalan',
@@ -226,21 +375,9 @@ class Database:
             where = {'param': param_ids, 'sta': sta_ids, 'date': date_ids}
             return where
 
-        select = kwargs.pop('select') if 'select' in kwargs.keys() else ''
-        select = _build.main_select_string(select)
+        select = _build.main_select_string(qa.select)
 
-        args = _utils.get_args(args, kwargs,
-                               dict.fromkeys(Database._keys, ''))
-        # Check argument types
-        _utils.check_arg_types(
-            args,
-            {'param': (str, list), 'city': (str, list),
-             'sta': (str, list), 'reg': (str, list),
-             'date': (str, list),
-             'year': (str, list, int), 'month': (str, list, int),
-             'day': (str, list, int), 'hour': (str, list, int),
-             'week': (str, list, int), 'doy': (str, list, int),
-             'hoy': (str, list, int)})
+        args = qa.to_dict(all_args=True)
 
         self._check_opt_queries(args)
         where_ids = _get_ids_for_tables(args)
@@ -371,12 +508,12 @@ class Database:
                 yield i
         cur.close()
 
-    def _query_data(self, args, kwargs, as_list=False, include_nan=True):
+    def _query_data(self, qa, as_list=False, include_nan=True):
         """Query database."""
         # args = ()
         # kwargs = {'pol': 'pm10', 'city': 'adana', 'sta': 'çatalan',
         #           'date': ['>=2015-01-01', '<=2019-01-01'], 'month': 3}
-        query, sel, opt_queries = self._build_query(args, kwargs)
+        query, sel, opt_queries = self._build_query(qa)
         ret = self._generator(query, sel, opt_queries, include_nan)
         if as_list:
             ret = list(ret)
@@ -471,17 +608,17 @@ class Database:
             include_nan (bool): Include NaN in results?
             verbose     (bool): Detailed output
         """
-        include_nan = True  # default NaN behaviour
-        if 'include_nan' in kwargs.keys():
-            include_nan = kwargs.pop('include_nan')
 
-        verbose = False  # verbose option
-        if 'verbose' in kwargs.keys():
-            verbose = kwargs.pop('verbose')
+        qa = DatabaseQueryArguments(*args, **kwargs)
+        args = _utils.get_args(
+            {}, qa.rest, {'include_nan': True, 'verbose': False})
+
+        include_nan = args.pop('include_nan')
+        verbose = args.pop('verbose')
 
         t1 = _time()
         data, colnames, query = self._query_data(
-            args, kwargs, as_list=self._return_type == 'list',
+            qa, as_list=self._return_type == 'list',
             include_nan=include_nan)
 
         if verbose:

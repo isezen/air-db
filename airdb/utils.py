@@ -30,6 +30,15 @@ def to_ascii(s):
     return s
 
 
+def split_str(x):
+    """Split string by '',' if contains."""
+    if isinstance(x, str) and ',' in x:
+        return x.split(',')
+    if isinstance(x, list):
+        return [split_str(i) for i in x]
+    return x
+
+
 def split(x, f):
     """
     R-style split function.
@@ -78,6 +87,39 @@ def concat(x, dim_names, recursive=True):
     return doms
 
 
+def int2str(x, keys=None):
+    """
+    Convert <int> to <str> or check if a <str> is convertible to <int>.
+
+    Args:
+        x (int, str, list): Arguments to be converted to int
+                            or to be checked if it is convertible or not.
+        keys (list)       : List of keys to choose in x if x is a <dict>.
+    Return:
+        Same type with x
+    """
+    if isinstance(x, int):
+        return str(x)
+    if isinstance(x, str) and x != '':
+        try:
+            int(x)
+        except ValueError as e:
+            msg = f"Cannot parse value to int. '{x}'"
+            raise ValueError(msg) from e
+    if isinstance(x, list):
+        return [int2str(i) for i in x]
+    if isinstance(x, dict) and isinstance(keys, list):
+        keys2 = [k for k in keys if k in x.keys()]
+        for k in keys2:
+            try:
+                x[k] = int2str(x[k])
+            except ValueError as e:  # pylint: disable=W0703
+                msg = f"Cannot parse value to int. '{k}: {x[k]}'"
+                raise ValueError(msg) from e
+
+    return x
+
+
 def get_args(args, kwargs, default):
     """Get option queries from args."""
     arguments = default.copy()
@@ -85,12 +127,9 @@ def get_args(args, kwargs, default):
         arguments[k] = a
 
     for k in kwargs.keys():
-        if k in arguments.keys():
-            arguments[k] = kwargs[k]
-            if arguments[k] is None:
-                arguments[k] = default[k]
-        else:
-            raise ValueError(f"Unknown argument ({k})")
+        arguments[k] = kwargs[k]
+        if arguments[k] is None:
+            arguments[k] = default[k]
     return arguments
 
 
@@ -108,8 +147,9 @@ def check_arg_types(args, default):
         None
     """
     for k, v in args.items():
-        if k in default.keys() and not isinstance(v, default[k]):
-            raise TypeError(f"{k} must be type of {default[k]}")
+        if v is not None:
+            if k in default.keys() and not isinstance(v, default[k]):
+                raise TypeError(f"{k} must be type of {default[k]}")
 
 
 def check_is_empty_or_none(args):
@@ -390,14 +430,14 @@ class Build:
             sel = sel.split(',')
 
         if isinstance(sel, list):
-
+            sel2 = sel.copy()
             for i in ['param', 'city', 'sta', 'date', 'value']:
-                if i not in sel:
-                    sel += [i]
+                if i not in sel2:
+                    sel2 += [i]
 
-            if any(s in opt_select.keys() for s in sel):
+            if any(s in opt_select.keys() for s in sel2):
                 opt_select = {k: False for k in opt_select.keys()}
-                for s in sel:
+                for s in sel2:
                     if s in opt_select.keys():
                         opt_select[s] = True
         else:
