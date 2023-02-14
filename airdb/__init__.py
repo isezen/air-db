@@ -32,7 +32,7 @@ from . import utils as _utils
 from .utils import Build as _build
 from .__errors__ import DatabaseVersionError as _DatabaseVersionError
 
-__version__ = '0.1.8'
+__version__ = '0.2.0'
 __author__ = 'Ismail SEZEN'
 __email__ = 'sezenismail@gmail.com'
 __license__ = 'AGPLv3'
@@ -153,7 +153,7 @@ class DatabaseQueryArguments:
             y = [y]
         m = list(set(x + y))
         if len(m) > 1:
-            return [i for i in m if i != '']
+            m = [i for i in m if i != '']
         if len(m) == 1:
             return m[0]
         return m
@@ -775,8 +775,10 @@ class Database:
         """
         args = _utils.get_args(
             args, kwargs,
-            {'name': '', 'region': '', 'select': '', 'return_type': 'df'})
+            {'name': '', 'region': '', 'select': '', 'return_type': 'df',
+             'set_index': False})
         return_type = args.pop('return_type')
+        set_index = args.pop('set_index')
         for k in list(args.keys())[0:2]:
             args[k] = _utils.to_ascii(args[k])
 
@@ -806,7 +808,7 @@ class Database:
 
         self._cur = self._con.cursor().execute(sql + ';')
         ret = self._return(return_type, sel.split(','))
-        if return_type == 'df':
+        if return_type == 'df' and set_index:
             cols = ret.columns.tolist()
             for n in ['id', 'name', 'nametr', 'lat', 'lon']:
                 if n in cols:
@@ -833,8 +835,9 @@ class Database:
         args = _utils.get_args(
             args, kwargs,
             {'name': '', 'city': '', 'region': '', 'select': '',
-             'return_type': 'df'})
+             'return_type': 'df', 'set_index': False})
         return_type = args.pop('return_type')
+        set_index = args.pop('set_index')
         for k in list(args.keys())[0:3]:
             args[k] = _utils.to_ascii(args[k])
 
@@ -867,7 +870,7 @@ class Database:
 
         self._cur = self._con.cursor().execute(sql + ';')
         ret = self._return(return_type, sel.split(','))
-        if return_type == 'df':
+        if return_type == 'df' and set_index:
             cols = ret.columns.tolist()
             for n in ['id', 'name', 'nametr', 'lat', 'lon']:
                 if n in cols:
@@ -903,11 +906,12 @@ class Database:
             args, kwargs,
             {'param': '', 'city': '', 'station': '',
              'region': '', 'select': '', 'wide': False,
-             'as_str': False, 'return_type': 'df'})
+             'as_str': False, 'return_type': 'df', 'set_index': False})
 
         wide = args.pop('wide')
         as_str = args.pop('as_str')
         return_type = args.pop('return_type')
+        set_index = args.pop('set_index')
         for k in list(args.keys())[0:4]:
             args[k] = _utils.to_ascii(args[k])
 
@@ -950,7 +954,8 @@ class Database:
             df = df.replace(_np.nan, F)
 
         else:
-            df = df.set_index(cols)
+            if set_index:
+                df = df.set_index(cols)
 
         if return_type != 'df':
             df = df.reset_index()
